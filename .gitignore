@@ -41,5 +41,22 @@ app.*.map.json
 # Keys (never commit real keys)
 # lib/config/api_config.dart  # uncomment if you put real keys
 .env
+.env.*
+!.env.example
 *.jks
 key.properties
+
+# Python (backend)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Render / misc
+.render/
