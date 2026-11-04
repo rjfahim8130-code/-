@@ -8,12 +8,13 @@ class ApiService {
   /// FastAPI ব্যাকএন্ড থেকে সব গল্প/উপন্যাস ফেচ
   static Future<List<StoryModel>> fetchStories() async {
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/stories'),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/stories'))
+          .timeout(const Duration(seconds: 25)); // Render cold start-এর জন্য বাড়ানো হলো
 
       if (response.statusCode == 200) {
-        final List data = json.decode(response.body);
+        final dynamic decoded = json.decode(response.body);
+        final List data = decoded is List ? decoded : (decoded['stories'] ?? []);
         return data.map((doc) => StoryModel.fromJson(doc)).toList();
       } else {
         print('Backend error: ${response.statusCode} → ${response.body}');
