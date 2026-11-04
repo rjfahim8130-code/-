@@ -1,25 +1,22 @@
 /// ============================================
 /// API CONFIGURATION
 /// ============================================
-/// 
-/// এখানে আপনার আসল API Key গুলো বসাবেন।
-/// 
-/// ১. FastAPI Backend URL (Render.com থেকে পাওয়া লাইভ URL)
-/// ২. DoodStream → https://doodstream.com → API Key (581331rkkizkdxrqwo6m5a)
+///
+/// Render.com-এ চলা FastAPI ব্যাকএন্ডের লাইভ URL
+/// এবং DoodStream API Key এখানে আছে।
 /// ============================================
 
 class ApiConfig {
-  // ---------- FastAPI Backend (MongoDB Middleware) ----------
-  // আপনার Render বা লাইভ সার্ভারের ব্যাকএন্ড বেস ইউআরএল এখানে বসাবেন
+  // ---------- FastAPI Backend (Render) ----------
   static const String baseUrl = String.fromEnvironment(
     'BASE_URL',
-    defaultValue: 'https://your-app.onrender.com', // ← এখানে আপনার Render-এর লাইভ URL বসাবেন
+    defaultValue: 'https://story-vault-5gu2.onrender.com',
   );
 
   // ---------- DoodStream API ----------
   static const String doodStreamApiKey = String.fromEnvironment(
     'DOOD_API_KEY',
-    defaultValue: '581331rkkizkdxrqwo6m5a',    // ← আপনার DoodStream API Key
+    defaultValue: '581331rkkizkdxrqwo6m5a',
   );
 
   // DoodStream API endpoints
