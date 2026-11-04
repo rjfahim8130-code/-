@@ -4,41 +4,22 @@
 /// 
 /// এখানে আপনার আসল API Key গুলো বসাবেন।
 /// 
-/// ১. MongoDB Atlas → App Services → Data API → Endpoint URL + API Key
-/// ২. DoodStream → https://doodstream.com → API Key
-/// 
-/// গুরুত্বপূর্ণ:
-/// - এই ফাইলটি GitHub-এ পাবলিক করবেন না যদি Key রাখেন।
-/// - অথবা --dart-define ব্যবহার করুন (নিচে দেখুন)।
-/// 
-/// Build করার সময়:
-/// flutter run --dart-define=MONGO_API_KEY=your_key --dart-define=DOOD_API_KEY=your_key
-/// 
-/// অথবা সরাসরি নিচের placeholder গুলো পরিবর্তন করুন।
+/// ১. FastAPI Backend URL (Render.com থেকে পাওয়া লাইভ URL)
+/// ২. DoodStream → https://doodstream.com → API Key (581331rkkizkdxrqwo6m5a)
 /// ============================================
 
 class ApiConfig {
-  // ---------- MongoDB Atlas Data API ----------
-  static const String mongoCluster = "Cluster0";           // আপনার Cluster নাম
-  static const String mongoDatabase = "stories_db";        // Database নাম
-  static const String mongoCollection = "stories";         // Collection নাম
-
-  // MongoDB Data API Base URL (App Services থেকে কপি করুন)
-  // উদাহরণ: https://ap-south-1.aws.data.mongodb-api.com/app/data-xxxxx/endpoint/data/v1
-  static const String mongoBaseUrl = String.fromEnvironment(
-    'MONGO_BASE_URL',
-    defaultValue: 'https://ap-south-1.aws.data.mongodb-api.com/app/data-XXXXX/endpoint/data/v1',
-  );
-
-  static const String mongoApiKey = String.fromEnvironment(
-    'MONGO_API_KEY',
-    defaultValue: 'YOUR_MONGODB_DATA_API_KEY',  // ← এখানে আপনার MongoDB API Key বসান
+  // ---------- FastAPI Backend (MongoDB Middleware) ----------
+  // আপনার Render বা লাইভ সার্ভারের ব্যাকএন্ড বেস ইউআরএল এখানে বসাবেন
+  static const String baseUrl = String.fromEnvironment(
+    'BASE_URL',
+    defaultValue: 'https://your-app.onrender.com', // ← এখানে আপনার Render-এর লাইভ URL বসাবেন
   );
 
   // ---------- DoodStream API ----------
   static const String doodStreamApiKey = String.fromEnvironment(
     'DOOD_API_KEY',
-    defaultValue: 'YOUR_DOODSTREAM_API_KEY',    // ← এখানে আপনার DoodStream API Key বসান
+    defaultValue: '581331rkkizkdxrqwo6m5a',    // ← আপনার DoodStream API Key
   );
 
   // DoodStream API endpoints
