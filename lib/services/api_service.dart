@@ -5,28 +5,18 @@ import '../models/story_model.dart';
 import '../models/video_model.dart';
 
 class ApiService {
-  /// MongoDB থেকে সব গল্প/উপন্যাস ফেচ
+  /// FastAPI ব্যাকএন্ড থেকে সব গল্প/উপন্যাস ফেচ
   static Future<List<StoryModel>> fetchStories() async {
     try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.mongoBaseUrl}/action/find'),
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': ApiConfig.mongoApiKey,
-        },
-        body: jsonEncode({
-          "dataSource": ApiConfig.mongoCluster,
-          "database": ApiConfig.mongoDatabase,
-          "collection": ApiConfig.mongoCollection,
-        }),
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/stories'),
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List documents = data['documents'] ?? [];
-        return documents.map((doc) => StoryModel.fromJson(doc)).toList();
+        final List data = json.decode(response.body);
+        return data.map((doc) => StoryModel.fromJson(doc)).toList();
       } else {
-        print('MongoDB error: ${response.statusCode} → ${response.body}');
+        print('Backend error: ${response.statusCode} → ${response.body}');
       }
     } catch (e) {
       print('Story fetch error: $e');
