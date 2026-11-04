@@ -23,9 +23,19 @@ class StoryModel {
     return StoryModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       title: json['title'] ?? 'Untitled',
-      description: json['description'] ?? '',
-      content: json['content'] ?? json['body'] ?? '',
-      imageUrl: json['imageUrl'] ?? json['image'] ?? json['cover'] ?? '',
+      // description না থাকলে code দেখাই (S101 ইত্যাদি) — ফাঁকা না দেখানোর জন্য
+      description: json['description'] ?? json['code'] ?? '',
+      // backend-এ content_text নামে থাকে
+      content: json['content'] ??
+          json['content_text'] ??
+          json['body'] ??
+          '',
+      // backend-এ thumbnail_url নামে থাকে
+      imageUrl: json['imageUrl'] ??
+          json['thumbnail_url'] ??
+          json['image'] ??
+          json['cover'] ??
+          '',
       author: json['author'] ?? 'Unknown',
       category: json['category'] ?? 'গল্প',
       createdAt: json['createdAt'] != null
