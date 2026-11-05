@@ -9,120 +9,185 @@ class CalculatorScreen extends StatefulWidget {
   State<CalculatorScreen> createState() => _CalculatorScreenState();
 }
 
-class _CalculatorScreenState extends State<CalculatorScreen> {
-  String _display = '0';
-  String _expression = '';
+class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerProviderStateMixin {
+  late TabController _tab;
+
+  // ---- Normal calculator ----
+  String _expr = '';
+  String _result = '0';
   String _passcode = '25*52';
-  bool _isResult = false;
+
+  // ---- Age calculator ----
+  final _birthCtrl = TextEditingController();
+  String _ageResult = '';
 
   @override
   void initState() {
     super.initState();
+    _tab = TabController(length: 2, vsync: this);
     _loadPasscode();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    _birthCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPasscode() async {
     final code = await StorageService.getPasscode();
-    setState(() => _passcode = code);
+    if (mounted) setState(() => _passcode = code);
   }
 
-  void _onButtonPressed(String value) {
-    setState(() {
-      if (value == 'C') {
-        _display = '0';
-        _expression = '';
-        _isResult = false;
-      } else if (value == '⌫') {
-        if (_display.length > 1) {
-          _display = _display.substring(0, _display.length - 1);
-          _expression = _expression.substring(0, _expression.length - 1);
-        } else {
-          _display = '0';
-          _expression = '';
-        }
-      } else if (value == '=') {
-        final cleanInput = _expression.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
-        final cleanPass = _passcode.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
+  // ---------- Math engine (correct order: * / then + -) ----------
+  double? _eval(String input) {
+    try {
+      var s = input.replaceAll('×', '*').replaceAll('÷', '/').replaceAll(' ', '');
+      if (s.isEmpty) return null;
 
-        if (cleanInput == cleanPass) {
-          // পাসকোড মিলেছে → Vault আনলক
-          StorageService.setUnlocked(true);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const VaultHomeScreen()),
-          );
+      // split by + - keeping signs
+      final tokens = <String>[];
+      final buf = StringBuffer();
+      for (int i = 0; i < s.length; i++) {
+        final c = s[i];
+        if ((c == '+' || c == '-') && i > 0 && s[i - 1] != '*' && s[i - 1] != '/') {
+          if (buf.isNotEmpty) tokens.add(buf.toString());
+          buf.clear();
+          tokens.add(c);
         } else {
-          // সাধারণ ক্যালকুলেটর ফলাফল (ছদ্মবেশ)
-          try {
-            final result = _evaluate(cleanInput);
-            _display = result.toString();
-            _expression = result.toString();
-            _isResult = true;
-          } catch (_) {
-            _display = 'Error';
-            _expression = '';
+          buf.write(c);
+        }
+      }
+      if (buf.isNotEmpty) tokens.add(buf.toString());
+
+      double parseTerm(String term) {
+        // handle * and /
+        final parts = <String>[];
+        final b = StringBuffer();
+        for (int i = 0; i < term.length; i++) {
+          final c = term[i];
+          if (c == '*' || c == '/') {
+            parts.add(b.toString());
+            parts.add(c);
+            b.clear();
+          } else {
+            b.write(c);
           }
+        }
+        parts.add(b.toString());
+        double v = double.parse(parts[0]);
+        for (int i = 1; i < parts.length; i += 2) {
+          final op = parts[i];
+          final n = double.parse(parts[i + 1]);
+          if (op == '*') {
+            v *= n;
+          } else {
+            if (n == 0) throw Exception('div0');
+            v /= n;
+          }
+        }
+        return v;
+      }
+
+      double total = parseTerm(tokens[0]);
+      for (int i = 1; i < tokens.length; i += 2) {
+        final op = tokens[i];
+        final v = parseTerm(tokens[i + 1]);
+        if (op == '+') {
+          total += v;
+        } else {
+          total -= v;
+        }
+      }
+      return total;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _onKey(String k) {
+    setState(() {
+      if (k == 'C') {
+        _expr = '';
+        _result = '0';
+      } else if (k == '⌫') {
+        if (_expr.isNotEmpty) _expr = _expr.substring(0, _expr.length - 1);
+        if (_expr.isEmpty) _result = '0';
+      } else if (k == '=') {
+        final clean = _expr.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
+        final pass = _passcode.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
+        if (clean == pass) {
+          StorageService.setUnlocked(true);
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const VaultHomeScreen()));
+          return;
+        }
+        final v = _eval(_expr);
+        if (v == null) {
+          _result = 'Error';
+        } else {
+          if (v == v.roundToDouble()) {
+            _result = v.toInt().toString();
+          } else {
+            _result = v.toStringAsFixed(6).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+          }
+          _expr = _result;
         }
       } else {
-        if (_isResult) {
-          _display = value;
-          _expression = value;
-          _isResult = false;
+        if (_result != '0' && _expr == _result && (k == '+' || k == '-' || k == '×' || k == '÷')) {
+          _expr = _result + k;
+        } else if (_expr == _result && !(k == '+' || k == '-' || k == '×' || k == '÷')) {
+          _expr = k;
         } else {
-          if (_display == '0' && value != '.' && value != '+' && value != '-' && value != '×' && value != '÷') {
-            _display = value;
-            _expression = value;
-          } else {
-            _display += value;
-            _expression += value;
-          }
+          _expr += k;
         }
       }
     });
   }
 
-  double _evaluate(String expr) {
-    // খুব সিম্পল evaluator (শুধু +, -, *, /)
-    expr = expr.replaceAll('×', '*').replaceAll('÷', '/');
-    // নিরাপদ নয়, কিন্তু ছদ্মবেশের জন্য যথেষ্ট
-    try {
-      // ignore: avoid_dynamic_calls
-      return double.parse(expr); // fallback
-    } catch (_) {
-      // আরও ভালো: simple parser
-      final parts = expr.split(RegExp(r'([+\-*/])'));
-      if (parts.length < 3) return double.tryParse(expr) ?? 0;
-      double a = double.tryParse(parts[0]) ?? 0;
-      String op = parts[1];
-      double b = double.tryParse(parts[2]) ?? 0;
-      switch (op) {
-        case '+': return a + b;
-        case '-': return a - b;
-        case '*': return a * b;
-        case '/': return b != 0 ? a / b : 0;
-        default: return 0;
-      }
+  void _calcAge() {
+    final text = _birthCtrl.text.trim();
+    DateTime? birth;
+    if (RegExp(r'^\d{4}$').hasMatch(text)) {
+      birth = DateTime(int.parse(text), 1, 1);
+    } else if (RegExp(r'^\d{4}-\d{1,2}-\d{1,2}$').hasMatch(text)) {
+      final p = text.split('-');
+      birth = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
     }
+    if (birth == null) {
+      setState(() => _ageResult = 'সঠিক তারিখ দিন (YYYY বা YYYY-MM-DD)');
+      return;
+    }
+    final now = DateTime.now();
+    int years = now.year - birth.year;
+    int months = now.month - birth.month;
+    int days = now.day - birth.day;
+    if (days < 0) {
+      months--;
+      days += DateTime(now.year, now.month, 0).day;
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+    setState(() => _ageResult = '$years বছর $months মাস $days দিন');
   }
 
-  Widget _buildButton(String text, {Color? bg, Color? fg, double flex = 1}) {
+  Widget _btn(String t, {Color? bg, Color? fg, int flex = 1}) {
     return Expanded(
-      flex: flex.toInt(),
+      flex: flex,
       child: Padding(
-        padding: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(5),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: bg ?? const Color(0xFF1E1E1E),
+            backgroundColor: bg ?? const Color(0xFF2A2A2A),
             foregroundColor: fg ?? Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            elevation: 2,
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
           ),
-          onPressed: () => _onButtonPressed(text),
-          child: Text(
-            text,
-            style: TextStyle(fontSize: text == '=' || text == 'C' ? 26 : 24, fontWeight: FontWeight.w500),
-          ),
+          onPressed: () => _onKey(t),
+          child: Text(t, style: TextStyle(fontSize: t == '=' || t == 'C' ? 24 : 22, fontWeight: FontWeight.w500)),
         ),
       ),
     );
@@ -133,105 +198,96 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        title: const Text('Age Calculator', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Age Calculator'),
         backgroundColor: const Color(0xFF121212),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline, size: 22),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  backgroundColor: const Color(0xFF1E1E1E),
-                  title: const Text('Age Calculator'),
-                  content: const Text('Enter birth year or use calculator.\nThis is a simple age calculator app.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-                  ],
+        bottom: TabBar(
+          controller: _tab,
+          indicatorColor: const Color(0xFF1E88E5),
+          tabs: const [Tab(text: 'ক্যালকুলেটর'), Tab(text: 'বয়স')],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tab,
+        children: [
+          // ===== Calculator tab =====
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    alignment: Alignment.bottomRight,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (_expr.isNotEmpty && _expr != _result)
+                          Text(_expr, style: TextStyle(color: Colors.grey[500], fontSize: 18), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(_result, style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w300), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
                 ),
-              );
-            },
+                Expanded(
+                  flex: 5,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      children: [
+                        Row(children: [_btn('C', bg: const Color(0xFFCF6679)), _btn('⌫'), _btn('÷'), _btn('×')]),
+                        Row(children: [_btn('7'), _btn('8'), _btn('9'), _btn('-')]),
+                        Row(children: [_btn('4'), _btn('5'), _btn('6'), _btn('+')]),
+                        Row(children: [_btn('1'), _btn('2'), _btn('3'), _btn('=', bg: const Color(0xFF1E88E5))]),
+                        Row(children: [_btn('0', flex: 2), _btn('.'), _btn('00')]),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ===== Age tab =====
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('জন্ম তারিখ / বছর', style: TextStyle(fontSize: 16)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _birthCtrl,
+                  keyboardType: TextInputType.datetime,
+                  style: const TextStyle(fontSize: 20),
+                  decoration: InputDecoration(
+                    hintText: '1998  অথবা  1998-05-15',
+                    filled: true,
+                    fillColor: const Color(0xFF1A1A1A),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E88E5),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _calcAge,
+                  child: const Text('বয়স বের করুন', style: TextStyle(fontSize: 16, color: Colors.white)),
+                ),
+                const SizedBox(height: 28),
+                if (_ageResult.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(14)),
+                    child: Text(_ageResult, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                  ),
+              ],
+            ),
           ),
         ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Display
-            Expanded(
-              flex: 2,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                alignment: Alignment.bottomRight,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (_expression.isNotEmpty && _expression != _display)
-                      Text(
-                        _expression,
-                        style: TextStyle(color: Colors.grey[500], fontSize: 18),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _display,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 48,
-                        fontWeight: FontWeight.w300,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Keypad
-            Expanded(
-              flex: 5,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    Row(children: [
-                      _buildButton('C', bg: const Color(0xFFCF6679), fg: Colors.white),
-                      _buildButton('⌫', bg: const Color(0xFF2A2A2A)),
-                      _buildButton('÷', bg: const Color(0xFF2A2A2A)),
-                      _buildButton('×', bg: const Color(0xFF2A2A2A)),
-                    ]),
-                    Row(children: [
-                      _buildButton('7'),
-                      _buildButton('8'),
-                      _buildButton('9'),
-                      _buildButton('-', bg: const Color(0xFF2A2A2A)),
-                    ]),
-                    Row(children: [
-                      _buildButton('4'),
-                      _buildButton('5'),
-                      _buildButton('6'),
-                      _buildButton('+', bg: const Color(0xFF2A2A2A)),
-                    ]),
-                    Row(children: [
-                      _buildButton('1'),
-                      _buildButton('2'),
-                      _buildButton('3'),
-                      _buildButton('=', bg: const Color(0xFF1E88E5), fg: Colors.white),
-                    ]),
-                    Row(children: [
-                      _buildButton('0', flex: 2),
-                      _buildButton('.'),
-                      _buildButton('00'),
-                    ]),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
