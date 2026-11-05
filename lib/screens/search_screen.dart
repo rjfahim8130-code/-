@@ -16,23 +16,24 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
-  List<StoryModel> _filteredStories = [];
-  List<VideoModel> _filteredVideos = [];
+  List<StoryModel> _fs = [];
+  List<VideoModel> _fv = [];
 
   void _search(String q) {
     setState(() {
       _query = q.toLowerCase().trim();
       if (_query.isEmpty) {
-        _filteredStories = [];
-        _filteredVideos = [];
+        _fs = [];
+        _fv = [];
       } else {
-        _filteredStories = widget.stories
+        _fs = widget.stories
             .where((s) =>
                 s.title.toLowerCase().contains(_query) ||
                 s.description.toLowerCase().contains(_query) ||
-                s.author.toLowerCase().contains(_query))
+                s.author.toLowerCase().contains(_query) ||
+                s.code.toLowerCase().contains(_query))
             .toList();
-        _filteredVideos = widget.videos
+        _fv = widget.videos
             .where((v) => v.title.toLowerCase().contains(_query))
             .toList();
       }
@@ -61,30 +62,50 @@ class _SearchScreenState extends State<SearchScreen> {
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
-                if (_filteredStories.isNotEmpty) ...[
-                  Text('গল্প (${_filteredStories.length})', style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
+                if (_fs.isNotEmpty) ...[
+                  Text('গল্প (${_fs.length})',
+                      style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  ..._filteredStories.map((s) => ListTile(
+                  ..._fs.map((s) => ListTile(
                         leading: const Icon(Icons.menu_book, color: Color(0xFF4CAF50)),
                         title: Text(s.title),
-                        subtitle: Text(s.author, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StoryDetailScreen(story: s))),
+                        subtitle: Text(s.cardSubtitle,
+                            style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => StoryDetailScreen(
+                              story: s,
+                              allStories: widget.stories,
+                            ),
+                          ),
+                        ),
                       )),
                   const SizedBox(height: 16),
                 ],
-                if (_filteredVideos.isNotEmpty) ...[
-                  Text('ভিডিও (${_filteredVideos.length})', style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
+                if (_fv.isNotEmpty) ...[
+                  Text('ভিডিও (${_fv.length})',
+                      style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  ..._filteredVideos.map((v) => ListTile(
+                  ..._fv.map((v) => ListTile(
                         leading: const Icon(Icons.play_circle, color: Color(0xFFE91E63)),
                         title: Text(v.title),
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VideoPlayerScreen(video: v))),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => VideoPlayerScreen(
+                              video: v,
+                              allVideos: widget.videos,
+                            ),
+                          ),
+                        ),
                       )),
                 ],
-                if (_filteredStories.isEmpty && _filteredVideos.isEmpty)
+                if (_fs.isEmpty && _fv.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 40),
-                    child: Center(child: Text('কিছু পাওয়া যায়নি', style: TextStyle(color: Colors.grey[600]))),
+                    child: Center(
+                        child: Text('কিছু পাওয়া যায়নি', style: TextStyle(color: Colors.grey[600]))),
                   ),
               ],
             ),
