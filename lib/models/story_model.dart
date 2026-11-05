@@ -21,92 +21,51 @@ class StoryModel {
     this.createdAt,
   });
 
-  /// যতটুকু তথ্য পায়, ততটুকু দিয়েই অবজেক্ট বানায়
   factory StoryModel.fromJson(Map<String, dynamic> json) {
-    // title fallback চেইন
-    final title = _firstNonEmpty([
-      json['title'],
-      json['name'],
-      json['code'],
-      'Untitled',
-    ]);
-
-    // content fallback
-    final content = _firstNonEmpty([
-      json['content'],
-      json['content_text'],
-      json['body'],
-      json['text'],
-      json['story'],
-      '',
-    ]);
-
-    // image fallback
-    final imageUrl = _firstNonEmpty([
-      json['imageUrl'],
-      json['thumbnail_url'],
-      json['thumbnail'],
-      json['image'],
-      json['cover'],
-      json['poster'],
-      '',
-    ]);
-
-    // description — না থাকলে content-এর প্রথম ১২০ অক্ষর
-    String description = _firstNonEmpty([
-      json['description'],
-      json['summary'],
-      json['code'],
-      '',
-    ]);
+    final content = _pick(json, ['content', 'content_text', 'body', 'text', 'story']);
+    final imageUrl = _pick(json, ['imageUrl', 'thumbnail_url', 'thumbnail', 'image', 'cover', 'poster']);
+    String description = _pick(json, ['description', 'summary', 'code']);
     if (description.isEmpty && content.isNotEmpty) {
       description = content.length > 120 ? '${content.substring(0, 120)}...' : content;
     }
 
     return StoryModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      title: title,
+      title: _pick(json, ['title', 'name', 'code'], fallback: 'Untitled'),
       description: description,
       content: content,
       imageUrl: imageUrl,
-      author: _firstNonEmpty([json['author'], json['writer'], 'Unknown']),
-      category: _firstNonEmpty([json['category'], json['type'], 'গল্প']),
+      author: _pick(json, ['author', 'writer'], fallback: 'Unknown'),
+      category: _pick(json, ['category', 'type'], fallback: 'গল্প'),
       code: json['code']?.toString() ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString())
-          : null,
+      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null,
     );
   }
 
-  /// null / খালি স্ট্রিং এড়িয়ে প্রথম ভ্যালিড মান নেয়
-  static String _firstNonEmpty(List<dynamic> values) {
-    for (final v in values) {
-      if (v == null) continue;
-      final s = v.toString().trim();
-      if (s.isNotEmpty) return s;
+  static String _pick(Map json, List<String> keys, {String fallback = ''}) {
+    for (final k in keys) {
+      final v = json[k];
+      if (v != null && v.toString().trim().isNotEmpty) return v.toString().trim();
     }
-    return '';
+    return fallback;
   }
 
-  /// কার্ডে দেখানোর জন্য সংক্ষিপ্ত টেক্সট
   String get cardSubtitle {
     if (description.isNotEmpty) return description;
     if (code.isNotEmpty) return code;
-    if (author.isNotEmpty && author != 'Unknown') return author;
     return category;
   }
 
-  /// ইমেজ আছে কিনা
   bool get hasImage => imageUrl.isNotEmpty;
 
-  Map<String, dynamic> toJson() => {
-        'title': title,
-        'description': description,
-        'content': content,
-        'imageUrl': imageUrl,
-        'author': author,
-        'category': category,
-        'code': code,
-        'createdAt': createdAt?.toIso8601String(),
-      };
+  /// টাইটেল থেকে পর্ব নম্বর বের করার চেষ্টা
+  String get episodeLabel {
+    final m = RegExp(r'পর্ব\s*(\d+)|part\s*(\d+)|episode\s*(\d+)', caseSensitive: false).firstMatch(title);
+    if (m != null) {
+      final n = m.group(1) ?? m.group(2) ?? m.group(3);
+      return 'পর্ব $n';
+    }
+    if (code.isNotEmpty) return code;
+    return category;
+  }
 }
