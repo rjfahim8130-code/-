@@ -51,7 +51,7 @@ class StoryListScreen extends StatelessWidget {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(10),
-                            child: story.imageUrl.isNotEmpty
+                            child: story.hasImage
                                 ? CachedNetworkImage(
                                     imageUrl: story.imageUrl,
                                     width: 80,
@@ -90,7 +90,7 @@ class StoryListScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  story.description,
+                                  story.cardSubtitle,
                                   style: TextStyle(color: Colors.grey[500], fontSize: 13),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
@@ -110,7 +110,7 @@ class StoryListScreen extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(story.author, style: TextStyle(color: Colors.grey[600], fontSize: 12) ),
+                                    Text(story.author, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                                   ],
                                 ),
                               ],
