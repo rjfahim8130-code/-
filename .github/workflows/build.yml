@@ -18,19 +18,18 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
+
       - name: Build APK
         run: flutter build apk --release --split-per-abi
-        # API keys চাইলে secrets ব্যবহার করুন:
-        # env:
-        #   MONGO_API_KEY: ${{ secrets.MONGO_API_KEY }}
-        #   DOOD_API_KEY: ${{ secrets.DOOD_API_KEY }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -38,3 +37,4 @@ jobs:
           name: calculator-vault-apks
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 30
+          
