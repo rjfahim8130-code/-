@@ -196,7 +196,15 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                   elevation: 0,
                 ),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StoryDetailScreen(story: story))),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StoryDetailScreen(
+                      story: story,
+                      allStories: _stories, // এখানে পুরো গল্পের লিস্ট পাস করা হলো
+                    ),
+                  ),
+                ),
                 child: const Text('সম্পূর্ণ পড়ুন', style: TextStyle(fontWeight: FontWeight.w600)),
               ),
             ),
@@ -218,7 +226,15 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
 
   Widget _videoCard(VideoModel video, {bool compact = false}) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VideoPlayerScreen(video: video, allVideos: _videos))),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(
+            video: video,
+            allVideos: _videos, // এখানে পুরো ভিডিওর লিস্ট পাস করা হলো
+          ),
+        ),
+      ),
       child: Container(
         margin: compact ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(14)),
