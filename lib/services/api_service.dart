@@ -5,18 +5,17 @@ import '../models/story_model.dart';
 import '../models/video_model.dart';
 
 class ApiService {
-  /// FastAPI থেকে সব গল্প ফেচ
   static Future<List<StoryModel>> fetchStories() async {
     try {
       final response = await http
           .get(Uri.parse('${ApiConfig.baseUrl}/stories'))
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final dynamic decoded = json.decode(response.body);
         final List data = decoded is List ? decoded : (decoded['stories'] ?? []);
         return data
-            .whereType() // শুধু ম্যাপ আইটেম
+            .whereType()
             .map((doc) => StoryModel.fromJson(Map<String, dynamic>.from(doc)))
             .toList();
       } else {
@@ -28,13 +27,12 @@ class ApiService {
     return [];
   }
 
-  /// DoodStream থেকে ভিডিও লিস্ট
   static Future<List<VideoModel>> fetchVideos({int page = 1, int perPage = 50}) async {
     try {
-      final url =
-          '${ApiConfig.doodListUrl}?key=${ApiConfig.doodStreamApiKey}&page=$page&per_page=$perPage';
+      // সঠিক ইউআরএল স্ট্রিং ইন্টারপোলেশন
+      final url = '${ApiConfig.doodListUrl}?key=${ApiConfig.doodStreamApiKey}&page=$page&per_page=$perPage';
       
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
