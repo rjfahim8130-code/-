@@ -1,0 +1,40 @@
+name: Build Release APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --split-per-abi
+        # API keys চাইলে secrets ব্যবহার করুন:
+        # env:
+        #   MONGO_API_KEY: ${{ secrets.MONGO_API_KEY }}
+        #   DOOD_API_KEY: ${{ secrets.DOOD_API_KEY }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-vault-apks
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
