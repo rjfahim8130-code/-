@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../models/story_model.dart';
 import '../models/video_model.dart';
+import '../widgets/ad_banner.dart';
 import 'story_detail_screen.dart';
 import 'video_player_screen.dart';
 import 'search_screen.dart';
@@ -19,11 +20,12 @@ class VaultHomeScreen extends StatefulWidget {
 }
 
 class _VaultHomeScreenState extends State<VaultHomeScreen> {
-  int _tab = 0; // 0 home, 1 stories, 2 videos
+  int _tab = 0;
   bool _syncing = false;
+  String? _error;
   List<StoryModel> _stories = [];
   List<VideoModel> _videos = [];
-  List<dynamic> _homeFeed = []; // mixed
+  List<dynamic> _homeFeed = [];
 
   @override
   void initState() {
@@ -33,15 +35,36 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
 
   Future<void> _sync() async {
     if (_syncing) return;
-    setState(() => _syncing = true);
+    setState(() {
+      _syncing = true;
+      _error = null;
+    });
     try {
-      final s = await ApiService.fetchStories();
-      final v = await ApiService.fetchVideos();
-      final mixed = <dynamic>[...s, ...v]..shuffle(Random());
+      // আলাদা আলাদা try — একটা ফেল করলে অন্যটা আসুক
+      List<StoryModel> stories = [];
+      List<VideoModel> videos = [];
+      try {
+        stories = await ApiService.fetchStories();
+      } catch (e) {
+        print('stories: $e');
+      }
+      try {
+        videos = await ApiService.fetchVideos();
+      } catch (e) {
+        print('videos: $e');
+      }
+
+      final mixed = <dynamic>[...stories, ...videos];
+      mixed.shuffle(Random());
+
+      if (!mounted) return;
       setState(() {
-        _stories = s;
-        _videos = v;
+        _stories = stories;
+        _videos = videos;
         _homeFeed = mixed;
+        if (stories.isEmpty && videos.isEmpty) {
+          _error = 'ডেটা আসেনি। Sync আবার চাপুন।';
+        }
       });
     } finally {
       if (mounted) setState(() => _syncing = false);
@@ -51,7 +74,10 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
   Future<void> _lock() async {
     await StorageService.lockVault();
     if (!mounted) return;
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CalculatorScreen()));
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const CalculatorScreen()),
+    );
   }
 
   @override
@@ -64,7 +90,11 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
         actions: [
           IconButton(
             icon: _syncing
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
                 : const Icon(Icons.sync),
             onPressed: _syncing ? null : _sync,
           ),
@@ -72,17 +102,33 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => SearchScreen(stories: _stories, videos: _videos)),
+              MaterialPageRoute(
+                builder: (_) => SearchScreen(stories: _stories, videos: _videos),
+              ),
             ),
           ),
-          IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
           IconButton(icon: const Icon(Icons.lock_outline), onPressed: _lock),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _sync,
-        color: const Color(0xFF1E88E5),
-        child: _buildBody(),
+      body: Column(
+        children: [
+          // ===== টপ ব্যানার (টেস্ট) =====
+          const AdBanner(height: 50),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _sync,
+              color: const Color(0xFF1E88E5),
+              child: _buildBody(),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF121212),
@@ -90,48 +136,109 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'হোম'),
-          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'গল্প'),
-          NavigationDestination(icon: Icon(Icons.play_circle_outline), selectedIcon: Icon(Icons.play_circle), label: 'ভিডিও'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'হোম',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'গল্প',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.play_circle_outline),
+            selectedIcon: Icon(Icons.play_circle),
+            label: 'ভিডিও',
+          ),
         ],
       ),
     );
   }
 
   Widget _buildBody() {
-    if (_tab == 1) return _storyList(_stories);
-    if (_tab == 2) return _videoGrid(_videos);
-    // Home mixed
+    if (_tab == 1) return _storiesBody();
+    if (_tab == 2) return _videosBody();
+    return _homeBody();
+  }
+
+  Widget _empty(String msg) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+        Center(
+          child: Column(
+            children: [
+              if (_syncing)
+                const CircularProgressIndicator(color: Color(0xFF1E88E5))
+              else
+                Icon(Icons.inbox_outlined, size: 56, color: Colors.grey[700]),
+              const SizedBox(height: 16),
+              Text(
+                _syncing ? 'লোড হচ্ছে...' : msg,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[500]),
+              ),
+              if (!_syncing) ...[
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: _sync,
+                  icon: const Icon(Icons.sync),
+                  label: const Text('আবার Sync'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _homeBody() {
     if (_homeFeed.isEmpty) {
-      return ListView(
-        children: [
-          SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-          Center(child: Text(_syncing ? 'লোড হচ্ছে...' : 'কোনো কন্টেন্ট নেই\nSync চাপুন', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600]))),
-        ],
-      );
+      return _empty(_error ?? 'হোমে এখনো কিছু নেই\nSync চাপুন');
     }
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
       itemCount: _homeFeed.length,
       itemBuilder: (_, i) {
         final item = _homeFeed[i];
         if (item is StoryModel) return _storyCard(item);
-        if (item is VideoModel) return _videoCard(item);
+        if (item is VideoModel) return _videoCardWide(item);
         return const SizedBox.shrink();
       },
     );
   }
 
-  Widget _storyList(List<StoryModel> list) {
-    if (list.isEmpty) return Center(child: Text('কোনো গল্প নেই', style: TextStyle(color: Colors.grey[600])));
+  Widget _storiesBody() {
+    if (_stories.isEmpty) return _empty('কোনো গল্প নেই');
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
-      itemCount: list.length,
-      itemBuilder: (_, i) => _storyCard(list[i]),
+      itemCount: _stories.length,
+      itemBuilder: (_, i) => _storyCard(_stories[i]),
     );
   }
 
-  /// প্রথম স্ক্রিনশটের মতো কার্ড
+  Widget _videosBody() {
+    if (_videos.isEmpty) return _empty('কোনো ভিডিও নেই');
+    return GridView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.72,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemCount: _videos.length,
+      itemBuilder: (_, i) => _videoCardGrid(_videos[i]),
+    );
+  }
+
+  /// গল্প কার্ড (স্ক্রিনশট স্টাইল)
   Widget _storyCard(StoryModel story) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -150,14 +257,26 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                 if (story.code.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: const Color(0xFF1E3A5F), borderRadius: BorderRadius.circular(20)),
-                    child: Text('কোড: ${story.code}', style: const TextStyle(fontSize: 11, color: Colors.lightBlueAccent)),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A5F),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'কোড: ${story.code}',
+                      style: const TextStyle(fontSize: 11, color: Colors.lightBlueAccent),
+                    ),
                   ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFF1B4332), borderRadius: BorderRadius.circular(20)),
-                  child: Text(story.episodeLabel, style: const TextStyle(fontSize: 11, color: Color(0xFF95D5B2))),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B4332),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    story.episodeLabel,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF95D5B2)),
+                  ),
                 ),
               ],
             ),
@@ -173,17 +292,31 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   width: double.infinity,
                   fit: BoxFit.cover,
                   placeholder: (_, __) => Container(height: 200, color: Colors.grey[900]),
-                  errorWidget: (_, __, ___) => Container(height: 200, color: Colors.grey[900], child: const Icon(Icons.broken_image, color: Colors.grey)),
+                  errorWidget: (_, __, ___) => Container(
+                    height: 200,
+                    color: Colors.grey[900],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
                 ),
               ),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-            child: Text(story.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700), maxLines: 2, overflow: TextOverflow.ellipsis),
+            child: Text(
+              story.title,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Text(story.cardSubtitle, style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.4), maxLines: 3, overflow: TextOverflow.ellipsis),
+            child: Text(
+              story.cardSubtitle,
+              style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.4),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -201,7 +334,7 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   MaterialPageRoute(
                     builder: (_) => StoryDetailScreen(
                       story: story,
-                      allStories: _stories, // এখানে পুরো গল্পের লিস্ট পাস করা হলো
+                      allStories: _stories,
                     ),
                   ),
                 ),
@@ -214,30 +347,73 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
-  Widget _videoGrid(List<VideoModel> list) {
-    if (list.isEmpty) return Center(child: Text('কোনো ভিডিও নেই', style: TextStyle(color: Colors.grey[600])));
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.72, crossAxisSpacing: 10, mainAxisSpacing: 10),
-      itemCount: list.length,
-      itemBuilder: (_, i) => _videoCard(list[i], compact: true),
-    );
-  }
-
-  Widget _videoCard(VideoModel video, {bool compact = false}) {
+  Widget _videoCardWide(VideoModel video) {
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(
-            video: video,
-            allVideos: _videos, // এখানে পুরো ভিডিওর লিস্ট পাস করা হলো
-          ),
+          builder: (_) => VideoPlayerScreen(video: video, allVideos: _videos),
         ),
       ),
       child: Container(
-        margin: compact ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(14)),
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    video.thumbnail.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: video.thumbnail,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(color: Colors.grey[900]),
+                          )
+                        : Container(color: Colors.grey[900]),
+                    const Center(
+                      child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                video.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _videoCardGrid(VideoModel video) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => VideoPlayerScreen(video: video, allVideos: _videos),
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -248,16 +424,27 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   fit: StackFit.expand,
                   children: [
                     video.thumbnail.isNotEmpty
-                        ? CachedNetworkImage(imageUrl: video.thumbnail, fit: BoxFit.cover, errorWidget: (_, __, ___) => Container(color: Colors.grey[900]))
+                        ? CachedNetworkImage(
+                            imageUrl: video.thumbnail,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(color: Colors.grey[900]),
+                          )
                         : Container(color: Colors.grey[900]),
-                    const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 48)),
+                    const Center(
+                      child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 40),
+                    ),
                   ],
                 ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.all(8),
-              child: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+              child: Text(
+                video.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              ),
             ),
           ],
         ),
