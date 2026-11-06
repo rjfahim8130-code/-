@@ -3,6 +3,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/video_model.dart';
+import '../widgets/ad_native.dart'; // নতুন ইমপোর্ট
 
 class VideoPlayerScreen extends StatefulWidget {
   final VideoModel video;
@@ -22,8 +23,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late VideoModel _current;
   late WebViewController _controller;
   bool _loading = true;
-
-  static const String bannerAdUrl = '';
 
   @override
   void initState() {
@@ -81,6 +80,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       ),
       body: Column(
         children: [
+          // 1. ভিডিও প্লেয়ার (উপরে)
           AspectRatio(
             aspectRatio: 16 / 9,
             child: Stack(
@@ -94,18 +94,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ],
             ),
           ),
+          
+          // 2. ভিডিও টাইটেল
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 _current.title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
+
+          // 3. হরাইজন্টাল অন্যান্য ভিডিও লিস্ট
           if (others.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(12, 8, 12, 6),
@@ -157,7 +161,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                             v.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11),
+                            style: const TextStyle(fontSize: 11, color: Colors.white70),
                           ),
                         ],
                       ),
@@ -167,28 +171,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
           ],
+
           const Spacer(),
-          Container(
-            height: 60,
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white12),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: bannerAdUrl.isEmpty
-                ? Center(
-                    child: Text('Ad Banner',
-                        style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-                  )
-                : WebViewWidget(
-                    controller: WebViewController()
-                      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-                      ..loadRequest(Uri.parse(bannerAdUrl)),
-                  ),
-          ),
+
+          // 4. নিচে নেটিভ অ্যাড
+          const AdNative(height: 120),
         ],
       ),
     );
