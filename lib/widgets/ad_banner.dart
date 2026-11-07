@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-/// Adsterra Banner 320x50 — হোম/গল্প/ভিডিও স্ক্রিনের উপরে
+/// Adsterra Banner 300x250 — প্লেয়ার ছাড়া সব স্ক্রিনের টপ (sticky)
 class AdBanner extends StatefulWidget {
-  final double height;
-  const AdBanner({super.key, this.height = 50});
+  const AdBanner({super.key});
 
   @override
   State<AdBanner> createState() => _AdBannerState();
@@ -26,14 +25,14 @@ class _AdBannerState extends State<AdBanner> {
 <body>
 <script>
   atOptions = {
-    'key' : '55ab2946fa3e9e6f9f905b2a74726eda',
+    'key' : 'fc1454c2d1336f9034aa01b47d93abf3',
     'format' : 'iframe',
-    'height' : 50,
-    'width' : 320,
+    'height' : 250,
+    'width' : 300,
     'params' : {}
   };
 </script>
-<script src="https://bauval.org/22/55ab2946fa3e9e6f9f905b2a74726eda"></script>
+<script src="https://bauval.org/22/fc1454c2d1336f9034aa01b47d93abf3"></script>
 </body>
 </html>
 ''';
@@ -50,7 +49,7 @@ class _AdBannerState extends State<AdBanner> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: widget.height,
+      height: 250,
       width: double.infinity,
       child: WebViewWidget(controller: _controller),
     );
