@@ -6,7 +6,8 @@ import '../services/storage_service.dart';
 import '../models/story_model.dart';
 import '../models/video_model.dart';
 import '../widgets/ad_banner.dart';
-import '../widgets/ad_native.dart'; // নতুন ইমপোর্ট
+import '../widgets/ad_native.dart';
+import '../widgets/ad_popunder_host.dart';
 import 'story_detail_screen.dart';
 import 'video_player_screen.dart';
 import 'search_screen.dart';
@@ -32,6 +33,45 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
   void initState() {
     super.initState();
     _sync();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AdPopunderHost.trigger();
+    });
+  }
+
+  DateTime _storyDate(StoryModel s) => s.createdAt ?? DateTime(2000);
+
+  DateTime _videoDate(VideoModel v) {
+    if (v.uploaded.isEmpty) return DateTime(2000);
+    return DateTime.tryParse(v.uploaded) ?? DateTime(2000);
+  }
+
+  DateTime _itemDate(dynamic item) {
+    if (item is StoryModel) return _storyDate(item);
+    if (item is VideoModel) return _videoDate(item);
+    return DateTime(2000);
+  }
+
+  /// নতুন আগে; একই দিনের মধ্যে হালকা শাফল
+  List<T> _sortByDateThenShuffle<T>(List<T> list, DateTime Function(T) dateOf) {
+    final copy = List<T>.from(list);
+    copy.sort((a, b) => dateOf(b).compareTo(dateOf(a)));
+    if (copy.length <= 1) return copy;
+
+    final today = DateTime.now();
+    final recent = <T>[];
+    final older = <T>[];
+    for (final item in copy) {
+      final d = dateOf(item);
+      final isNew = today.difference(d).inDays <= 1;
+      if (isNew) {
+        recent.add(item);
+      } else {
+        older.add(item);
+      }
+    }
+    recent.shuffle(Random());
+    older.shuffle(Random());
+    return [...recent, ...older];
   }
 
   Future<void> _sync() async {
@@ -54,14 +94,17 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
         print('videos error: $e');
       }
 
+      stories = _sortByDateThenShuffle(stories, _storyDate);
+      videos = _sortByDateThenShuffle(videos, _videoDate);
+
       final mixed = <dynamic>[...stories, ...videos];
-      mixed.shuffle(Random());
+      final sortedMixed = _sortByDateThenShuffle(mixed, _itemDate);
 
       if (!mounted) return;
       setState(() {
         _stories = stories;
         _videos = videos;
-        _homeFeed = mixed;
+        _homeFeed = sortedMixed;
         if (stories.isEmpty && videos.isEmpty) {
           _error = 'ডেটা আসেনি। Sync আবার চাপুন।';
         }
@@ -80,85 +123,113 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
+  Future<void> _openStory(StoryModel story) async {
+    await AdPopunderHost.trigger();
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StoryDetailScreen(story: story, allStories: _stories),
+      ),
+    );
+  }
+
+  Future<void> _openVideo(VideoModel video) async {
+    await AdPopunderHost.trigger();
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoPlayerScreen(video: video, allVideos: _videos),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      appBar: AppBar(
-        title: const Text('Private Vault', style: TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF121212),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: _syncing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.sync),
-            onPressed: _syncing ? null : _sync,
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SearchScreen(stories: _stories, videos: _videos),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: const Color(0xFF0D0D0D),
+          appBar: AppBar(
+            title: const Text('Private Vault', style: TextStyle(fontWeight: FontWeight.w600)),
+            backgroundColor: const Color(0xFF121212),
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: _syncing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.sync),
+                onPressed: _syncing ? null : _sync,
               ),
-            ),
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () async {
+                  await AdPopunderHost.trigger();
+                  if (!mounted) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SearchScreen(stories: _stories, videos: _videos),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
+              ),
+              IconButton(icon: const Icon(Icons.lock_outline), onPressed: _lock),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+          body: Column(
+            children: [
+              const AdBanner(),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _sync,
+                  color: const Color(0xFF1E88E5),
+                  child: _buildBody(),
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.lock_outline),
-            onPressed: _lock,
+          bottomNavigationBar: NavigationBar(
+            backgroundColor: const Color(0xFF121212),
+            indicatorColor: const Color(0xFF1E88E5).withOpacity(0.25),
+            selectedIndex: _tab,
+            onDestinationSelected: (i) async {
+              await AdPopunderHost.trigger();
+              if (mounted) setState(() => _tab = i);
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'হোম',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.menu_book_outlined),
+                selectedIcon: Icon(Icons.menu_book),
+                label: 'গল্প',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.play_circle_outline),
+                selectedIcon: Icon(Icons.play_circle),
+                label: 'ভিডিও',
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // ===== টপ ব্যানার =====
-          const AdBanner(height: 50),
-
-          // ===== নিচে বাকি স্ক্রিন =====
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _sync,
-              color: const Color(0xFF1E88E5),
-              child: _buildBody(),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF121212),
-        indicatorColor: const Color(0xFF1E88E5).withOpacity(0.25),
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'হোম',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'গল্প',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.play_circle_outline),
-            selectedIcon: Icon(Icons.play_circle),
-            label: 'ভিডিও',
-          ),
-        ],
-      ),
+        ),
+        AdPopunderHost(key: AdPopunderHost.hostKey),
+      ],
     );
   }
 
@@ -175,7 +246,6 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
         SizedBox(height: MediaQuery.of(context).size.height * 0.25),
         Center(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (_syncing)
                 const CircularProgressIndicator(color: Color(0xFF1E88E5))
@@ -202,27 +272,27 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
+  /// প্রতি ২টা কার্ডের পর ১টা Native → স্লট: data, data, ad, data, data, ad...
+  int _countWithAds(int n) => n + (n ~/ 2);
+
+  int _dataIndex(int i) => i - (i ~/ 3);
+
+  bool _isAdSlot(int i) => (i + 1) % 3 == 0;
+
   Widget _homeBody() {
     if (_homeFeed.isEmpty) {
       return _empty(_error ?? 'হোমে এখনো কিছু নেই\nSync চাপুন');
     }
-
-    final itemCount = _homeFeed.length + (_homeFeed.length ~/ 3);
-
+    final n = _homeFeed.length;
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
-      itemCount: itemCount,
+      itemCount: _countWithAds(n),
       itemBuilder: (_, i) {
-        // প্রতি ৪টা স্লটের ৪র্থটা = নেটিভ অ্যাড
-        if ((i + 1) % 4 == 0) {
-          return const AdNative(height: 250);
-        }
-        final dataIndex = i - (i ~/ 4);
-        if (dataIndex < 0 || dataIndex >= _homeFeed.length) {
-          return const SizedBox.shrink();
-        }
-        final item = _homeFeed[dataIndex];
+        if (_isAdSlot(i)) return const AdNative(height: 250);
+        final di = _dataIndex(i);
+        if (di < 0 || di >= n) return const SizedBox.shrink();
+        final item = _homeFeed[di];
         if (item is StoryModel) return _storyCard(item);
         if (item is VideoModel) return _videoCardWide(item);
         return const SizedBox.shrink();
@@ -232,19 +302,14 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
 
   Widget _storiesBody() {
     if (_stories.isEmpty) return _empty('কোনো গল্প নেই');
-
     final n = _stories.length;
-    final itemCount = n + (n ~/ 3);
-
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
-      itemCount: itemCount,
+      itemCount: _countWithAds(n),
       itemBuilder: (_, i) {
-        if ((i + 1) % 4 == 0) {
-          return const AdNative(height: 250);
-        }
-        final di = i - (i ~/ 4);
+        if (_isAdSlot(i)) return const AdNative(height: 250);
+        final di = _dataIndex(i);
         if (di < 0 || di >= n) return const SizedBox.shrink();
         return _storyCard(_stories[di]);
       },
@@ -253,31 +318,20 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
 
   Widget _videosBody() {
     if (_videos.isEmpty) return _empty('কোনো ভিডিও নেই');
-
-    return ListView(
+    final n = _videos.length;
+    return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
-      children: [
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 0.72,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-          ),
-          itemCount: _videos.length,
-          itemBuilder: (_, i) => _videoCardGrid(_videos[i]),
-        ),
-        const SizedBox(height: 12),
-        // ===== ভিডিও লিস্টের নিচে নেটিভ =====
-        const AdNative(height: 250),
-      ],
+      itemCount: _countWithAds(n),
+      itemBuilder: (_, i) {
+        if (_isAdSlot(i)) return const AdNative(height: 250);
+        final di = _dataIndex(i);
+        if (di < 0 || di >= n) return const SizedBox.shrink();
+        return _videoCardWide(_videos[di]);
+      },
     );
   }
 
-  /// গল্প কার্ড
   Widget _storyCard(StoryModel story) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -368,15 +422,7 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                   elevation: 0,
                 ),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StoryDetailScreen(
-                      story: story,
-                      allStories: _stories,
-                    ),
-                  ),
-                ),
+                onPressed: () => _openStory(story),
                 child: const Text('সম্পূর্ণ পড়ুন', style: TextStyle(fontWeight: FontWeight.w600)),
               ),
             ),
@@ -388,12 +434,7 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
 
   Widget _videoCardWide(VideoModel video) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(video: video, allVideos: _videos),
-        ),
-      ),
+      onTap: () => _openVideo(video),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
@@ -432,58 +473,6 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _videoCardGrid(VideoModel video) {
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => VideoPlayerScreen(video: video, allVideos: _videos),
-        ),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    video.thumbnail.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: video.thumbnail,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => Container(color: Colors.grey[900]),
-                          )
-                        : Container(color: Colors.grey[900]),
-                    const Center(
-                      child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 40),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                video.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white),
               ),
             ),
           ],
