@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-/// Adsterra Native — লিস্টের মাঝে / ভিডিও নিচে
+/// Adsterra Native — লিস্টের মাঝে / প্লেয়ার নিচে / ডিটেইল-রিডার
 class AdNative extends StatefulWidget {
   final double height;
   const AdNative({super.key, this.height = 250});
