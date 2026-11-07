@@ -3,7 +3,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/video_model.dart';
-import '../widgets/ad_native.dart'; // নতুন ইমপোর্ট
+import '../widgets/ad_native.dart';
+import '../widgets/ad_popunder_host.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final VideoModel video;
@@ -53,6 +54,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _openExternal() async {
+    await AdPopunderHost.trigger();
     final uri = Uri.parse(_current.playUrl);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -80,7 +82,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       ),
       body: Column(
         children: [
-          // 1. ভিডিও প্লেয়ার (উপরে)
           AspectRatio(
             aspectRatio: 16 / 9,
             child: Stack(
@@ -94,22 +95,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ],
             ),
           ),
-          
-          // 2. ভিডিও টাইটেল
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 _current.title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
-
-          // 3. হরাইজন্টাল অন্যান্য ভিডিও লিস্ট
           if (others.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(12, 8, 12, 6),
@@ -119,7 +120,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
             SizedBox(
-              height: 120,
+              height: 100,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -130,7 +131,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   return GestureDetector(
                     onTap: () => _switchTo(v),
                     child: SizedBox(
-                      width: 150,
+                      width: 140,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -171,11 +172,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
           ],
-
-          const Spacer(),
-
-          // 4. নিচে নেটিভ অ্যাড
-          const AdNative(height: 120),
+          // হরাইজন্টালের ঠিক পরে Native — Spacer নেই
+          const Expanded(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: AdNative(height: 250),
+              ),
+            ),
+          ),
+          const SafeArea(top: false, child: SizedBox(height: 4)),
         ],
       ),
     );
