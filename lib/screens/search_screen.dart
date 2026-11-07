@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/story_model.dart';
 import '../models/video_model.dart';
+import '../widgets/ad_banner.dart';
+import '../widgets/ad_native.dart';
+import '../widgets/ad_popunder_host.dart';
 import 'story_detail_screen.dart';
 import 'video_player_screen.dart';
 
@@ -57,58 +60,90 @@ class _SearchScreenState extends State<SearchScreen> {
           onChanged: _search,
         ),
       ),
-      body: _query.isEmpty
-          ? Center(child: Text('কিছু লিখে সার্চ করুন', style: TextStyle(color: Colors.grey[600])))
-          : ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                if (_fs.isNotEmpty) ...[
-                  Text('গল্প (${_fs.length})',
-                      style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  ..._fs.map((s) => ListTile(
-                        leading: const Icon(Icons.menu_book, color: Color(0xFF4CAF50)),
-                        title: Text(s.title),
-                        subtitle: Text(s.cardSubtitle,
-                            style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => StoryDetailScreen(
-                              story: s,
-                              allStories: widget.stories,
+      body: Column(
+        children: [
+          const AdBanner(),
+          Expanded(
+            child: _query.isEmpty
+                ? Center(
+                    child: Text('কিছু লিখে সার্চ করুন', style: TextStyle(color: Colors.grey[600])),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      if (_fs.isNotEmpty) ...[
+                        Text(
+                          'গল্প (${_fs.length})',
+                          style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        ..._fs.map(
+                          (s) => ListTile(
+                            leading: const Icon(Icons.menu_book, color: Color(0xFF4CAF50)),
+                            title: Text(s.title, style: const TextStyle(color: Colors.white)),
+                            subtitle: Text(
+                              s.cardSubtitle,
+                              style: TextStyle(color: Colors.grey[500], fontSize: 12),
                             ),
+                            onTap: () async {
+                              await AdPopunderHost.trigger();
+                              if (!mounted) return;
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => StoryDetailScreen(
+                                    story: s,
+                                    allStories: widget.stories,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      )),
-                  const SizedBox(height: 16),
-                ],
-                if (_fv.isNotEmpty) ...[
-                  Text('ভিডিও (${_fv.length})',
-                      style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  ..._fv.map((v) => ListTile(
-                        leading: const Icon(Icons.play_circle, color: Color(0xFFE91E63)),
-                        title: Text(v.title),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => VideoPlayerScreen(
-                              video: v,
-                              allVideos: widget.videos,
-                            ),
+                        const SizedBox(height: 12),
+                        const AdNative(height: 250),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_fv.isNotEmpty) ...[
+                        Text(
+                          'ভিডিও (${_fv.length})',
+                          style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        ..._fv.map(
+                          (v) => ListTile(
+                            leading: const Icon(Icons.play_circle, color: Color(0xFFE91E63)),
+                            title: Text(v.title, style: const TextStyle(color: Colors.white)),
+                            onTap: () async {
+                              await AdPopunderHost.trigger();
+                              if (!mounted) return;
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => VideoPlayerScreen(
+                                    video: v,
+                                    allVideos: widget.videos,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      )),
-                ],
-                if (_fs.isEmpty && _fv.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 40),
-                    child: Center(
-                        child: Text('কিছু পাওয়া যায়নি', style: TextStyle(color: Colors.grey[600]))),
+                        const SizedBox(height: 12),
+                        const AdNative(height: 250),
+                      ],
+                      if (_fs.isEmpty && _fv.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: Text('কিছু পাওয়া যায়নি', style: TextStyle(color: Colors.grey[600])),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
+          ),
+        ],
+      ),
     );
   }
 }
