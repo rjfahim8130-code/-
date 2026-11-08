@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart'; // ⬅️ url_launcher যোগ করা হলো
 import '../models/story_model.dart';
 import '../models/video_model.dart';
-import '../widgets/ad_banner.dart';
+import '../widgets/ad_top_native.dart'; // ⬅️ AdTopNative
 import '../widgets/ad_native.dart';
 import '../widgets/ad_popunder_host.dart';
+import '../services/video_open_service.dart'; // ⬅️ VideoOpenService
 import 'story_detail_screen.dart';
 import 'video_player_screen.dart';
 
@@ -43,6 +45,27 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
+  /// ✅ ভিডিও ট্যাপে সেফ VideoOpenService লজিক
+  Future<void> _openVideo(VideoModel video) async {
+    await AdPopunderHost.trigger();
+
+    final openedExternally = await VideoOpenService.tryOpenExternal(() async {
+      final uri = Uri.parse(video.playUrl);
+      if (!await canLaunchUrl(uri)) return false;
+      return launchUrl(uri, mode: LaunchMode.externalApplication);
+    });
+
+    if (openedExternally) return;
+
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoPlayerScreen(video: video, allVideos: widget.videos),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,7 +85,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: Column(
         children: [
-          const AdBanner(),
+          const AdTopNative(), // ⬅️ AdBanner এর বদলে AdTopNative
           Expanded(
             child: _query.isEmpty
                 ? Center(
@@ -101,7 +124,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const AdNative(height: 250),
+                        const AdNative(height: 130), // ⬅️ উচ্চতা স্ট্যান্ডার্ড 130 করা হলো
                         const SizedBox(height: 16),
                       ],
                       if (_fv.isNotEmpty) ...[
@@ -114,23 +137,11 @@ class _SearchScreenState extends State<SearchScreen> {
                           (v) => ListTile(
                             leading: const Icon(Icons.play_circle, color: Color(0xFFE91E63)),
                             title: Text(v.title, style: const TextStyle(color: Colors.white)),
-                            onTap: () async {
-                              await AdPopunderHost.trigger();
-                              if (!mounted) return;
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => VideoPlayerScreen(
-                                    video: v,
-                                    allVideos: widget.videos,
-                                  ),
-                                ),
-                              );
-                            },
+                            onTap: () => _openVideo(v), // ⬅️ আপডেট করা _openVideo ব্যবহার
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const AdNative(height: 250),
+                        const AdNative(height: 130), // ⬅️ উচ্চতা স্ট্যান্ডার্ড 130 করা হলো
                       ],
                       if (_fs.isEmpty && _fv.isEmpty)
                         Padding(
