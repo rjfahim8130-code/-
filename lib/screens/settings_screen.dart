@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/storage_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,37 +15,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _obscure = true;
   bool _saving = false;
 
+  static final _allowedRegex = RegExp(r'^[0-9+\-*/×÷.]+$');
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final code = await StorageService.getPasscode();
+    if (!mounted) return;
     setState(() {
       _currentPasscode = code;
       _controller.text = code;
     });
   }
 
+  String? _validate(String raw) {
+    final code = raw.replaceAll(' ', '');
+    if (code.isEmpty) return 'পাসকোড খালি রাখা যাবে না';
+    if (code.length < 4) return 'কমপক্ষে ৪ অক্ষর দিন';
+    if (!_allowedRegex.hasMatch(code)) {
+      return 'শুধু 0-9, + - × ÷ * / . ব্যবহার করুন';
+    }
+    if (!RegExp(r'[+\-*/×÷]').hasMatch(code)) {
+      return 'অন্তত একটি অপারেটর (+ - × ÷) দিন, যেমন: 25*52';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
-    final newCode = _controller.text.trim();
-    if (newCode.isEmpty) {
+    final raw = _controller.text;
+    final error = _validate(raw);
+    if (error != null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('পাসকোড খালি রাখা যাবে না')),
+        SnackBar(content: Text(error)),
       );
       return;
     }
+    final newCode = raw.replaceAll(' ', '');
+
+    if (newCode == _currentPasscode) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('এটাই বর্তমান পাসকোড')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
-    await StorageService.setPasscode(newCode);
-    setState(() {
-      _currentPasscode = newCode;
-      _saving = false;
-    });
-    if (mounted) {
+    try {
+      await StorageService.setPasscode(newCode);
+      if (!mounted) return;
+      setState(() {
+        _currentPasscode = newCode;
+        _controller.text = newCode;
+        _saving = false;
+        _obscure = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('পাসকোড সফলভাবে সেভ হয়েছে')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('সেভ করতে সমস্যা: $e')),
       );
     }
   }
@@ -66,18 +110,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'ক্যালকুলেটরে এই এক্সপ্রেশন লিখে = চাপলেই ভল্ট আনলক হবে।\nউদাহরণ: 25*52 অথবা 100+50',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.4),
+            'ক্যালকুলেটরে এই এক্সপ্রেশন লিখে = চাপলেই ভল্ট আনলক হবে。\n'
+            'উদাহরণ: 25*52  অথবা  100+50  অথবা  12×34',
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 20),
           TextField(
             controller: _controller,
             obscureText: _obscure,
+            autocorrect: false,
+            enableSuggestions: false,
+            keyboardType: TextInputType.visiblePassword,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(
+                RegExp(r'[0-9+\-*/×÷. ]'),
+              ),
+            ],
             style: const TextStyle(fontSize: 18, letterSpacing: 1.5),
             decoration: InputDecoration(
               filled: true,
               fillColor: const Color(0xFF1A1A1A),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
               hintText: '25*52',
               suffixIcon: IconButton(
                 icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
@@ -92,12 +152,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1E88E5),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               onPressed: _saving ? null : _save,
               child: _saving
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('পাসকোড সেভ করুন', style: TextStyle(fontSize: 16)),
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'পাসকোড সেভ করুন',
+                      style: TextStyle(fontSize: 16),
+                    ),
             ),
           ),
           const SizedBox(height: 32),
@@ -110,10 +182,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('বর্তমান পাসকোড', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                Text(
+                  'বর্তমান পাসকোড',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                ),
                 const SizedBox(height: 6),
                 Text(
-                  _obscure ? '•' * _currentPasscode.length : _currentPasscode,
+                  _obscure ? '•' * 8 : _currentPasscode,
                   style: const TextStyle(fontSize: 18, letterSpacing: 2),
                 ),
               ],
