@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/story_model.dart';
-import '../widgets/ad_banner.dart';
+import '../widgets/ad_top_native.dart'; // ⬅️ AdTopNative
 import '../widgets/ad_native.dart';
 import '../widgets/ad_popunder_host.dart';
 import 'story_detail_screen.dart';
@@ -25,7 +25,7 @@ class StoryListScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          const AdBanner(),
+          const AdTopNative(), // ⬅️ AdBanner এর বদলে AdTopNative
           Expanded(
             child: stories.isEmpty
                 ? Center(
@@ -48,7 +48,7 @@ class StoryListScreen extends StatelessWidget {
                     itemCount: _countWithAds(stories.length),
                     itemBuilder: (context, i) {
                       if (_isAdSlot(i)) {
-                        return const AdNative(height: 250);
+                        return const AdNative(height: 130); // ⬅️ উচ্চতা স্ট্যান্ডার্ড 130 করা হলো
                       }
                       final di = _dataIndex(i);
                       if (di < 0 || di >= stories.length) {
