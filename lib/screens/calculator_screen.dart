@@ -9,13 +9,14 @@ class CalculatorScreen extends StatefulWidget {
   State<CalculatorScreen> createState() => _CalculatorScreenState();
 }
 
-class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerProviderStateMixin {
+class _CalculatorScreenState extends State<CalculatorScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tab;
 
   // ---- Normal calculator ----
   String _expr = '';
   String _result = '0';
-  String _passcode = '25*52';
+  String? _passcode; // ⬅️ nullable; null = এখনো লোড হয়নি (Cold-start নিরাপত্তা)
 
   // ---- Age calculator ----
   final _birthCtrl = TextEditingController();
@@ -43,15 +44,20 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
   // ---------- Math engine (correct order: * / then + -) ----------
   double? _eval(String input) {
     try {
-      var s = input.replaceAll('×', '*').replaceAll('÷', '/').replaceAll(' ', '');
+      var s = input
+          .replaceAll('×', '*')
+          .replaceAll('÷', '/')
+          .replaceAll(' ', '');
       if (s.isEmpty) return null;
 
-      // split by + - keeping signs
       final tokens = <String>[];
       final buf = StringBuffer();
       for (int i = 0; i < s.length; i++) {
         final c = s[i];
-        if ((c == '+' || c == '-') && i > 0 && s[i - 1] != '*' && s[i - 1] != '/') {
+        if ((c == '+' || c == '-') &&
+            i > 0 &&
+            s[i - 1] != '*' &&
+            s[i - 1] != '/') {
           if (buf.isNotEmpty) tokens.add(buf.toString());
           buf.clear();
           tokens.add(c);
@@ -62,7 +68,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
       if (buf.isNotEmpty) tokens.add(buf.toString());
 
       double parseTerm(String term) {
-        // handle * and /
         final parts = <String>[];
         final b = StringBuffer();
         for (int i = 0; i < term.length; i++) {
@@ -106,20 +111,37 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
     }
   }
 
+  String _normalize(String s) =>
+      s.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
+
   void _onKey(String k) {
     setState(() {
       if (k == 'C') {
         _expr = '';
         _result = '0';
-      } else if (k == '⌫') {
-        if (_expr.isNotEmpty) _expr = _expr.substring(0, _expr.length - 1);
+        return;
+      }
+      if (k == '⌫') {
+        if (_expr.isNotEmpty) {
+          _expr = _expr.substring(0, _expr.length - 1);
+        }
         if (_expr.isEmpty) _result = '0';
-      } else if (k == '=') {
-        final clean = _expr.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
-        final pass = _passcode.replaceAll(' ', '').replaceAll('×', '*').replaceAll('÷', '/');
-        if (clean == pass) {
+        return;
+      }
+      if (k == '=') {
+        // পাসকোড লোড হওয়ার আগে ম্যাচিং বন্ধ
+        if (_passcode == null) {
+          _result = '...';
+          return;
+        }
+        final clean = _normalize(_expr);
+        final pass = _normalize(_passcode!);
+        if (clean.isNotEmpty && clean == pass) {
           StorageService.setUnlocked(true);
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const VaultHomeScreen()));
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const VaultHomeScreen()),
+          );
           return;
         }
         final v = _eval(_expr);
@@ -129,18 +151,25 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
           if (v == v.roundToDouble()) {
             _result = v.toInt().toString();
           } else {
-            _result = v.toStringAsFixed(6).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+            _result = v
+                .toStringAsFixed(6)
+                .replaceAll(RegExp(r'0*$'), '')
+                .replaceAll(RegExp(r'\.$'), '');
           }
           _expr = _result;
         }
+        return;
+      }
+      // সংখ্যা বা অপারেটর ইনপুট
+      if (_result != '0' &&
+          _expr == _result &&
+          (k == '+' || k == '-' || k == '×' || k == '÷')) {
+        _expr = _result + k;
+      } else if (_expr == _result &&
+          !(k == '+' || k == '-' || k == '×' || k == '÷')) {
+        _expr = k;
       } else {
-        if (_result != '0' && _expr == _result && (k == '+' || k == '-' || k == '×' || k == '÷')) {
-          _expr = _result + k;
-        } else if (_expr == _result && !(k == '+' || k == '-' || k == '×' || k == '÷')) {
-          _expr = k;
-        } else {
-          _expr += k;
-        }
+        _expr += k;
       }
     });
   }
@@ -151,8 +180,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
     if (RegExp(r'^\d{4}$').hasMatch(text)) {
       birth = DateTime(int.parse(text), 1, 1);
     } else if (RegExp(r'^\d{4}-\d{1,2}-\d{1,2}$').hasMatch(text)) {
-      final p = text.split('-');
-      birth = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+      // DateTime.tryParse দিয়ে ভুল তারিখ (যেমন ১৩ মাস বা ৪০ দিন) প্রত্যাখ্যান
+      birth = DateTime.tryParse(text);
     }
     if (birth == null) {
       setState(() => _ageResult = 'সঠিক তারিখ দিন (YYYY বা YYYY-MM-DD)');
@@ -183,11 +212,18 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
             backgroundColor: bg ?? const Color(0xFF2A2A2A),
             foregroundColor: fg ?? Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 18),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
             elevation: 0,
           ),
           onPressed: () => _onKey(t),
-          child: Text(t, style: TextStyle(fontSize: t == '=' || t == 'C' ? 24 : 22, fontWeight: FontWeight.w500)),
+          child: Text(
+            t,
+            style: TextStyle(
+              fontSize: t == '=' || t == 'C' ? 24 : 22,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ),
     );
@@ -203,7 +239,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
         bottom: TabBar(
           controller: _tab,
           indicatorColor: const Color(0xFF1E88E5),
-          tabs: const [Tab(text: 'ক্যালকুলেটর'), Tab(text: 'বয়স')],
+          tabs: const [Tab(text: 'ক্যালকুলেটর'), Tab(text: 'বয়স')],
         ),
       ),
       body: TabBarView(
@@ -224,8 +260,22 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         if (_expr.isNotEmpty && _expr != _result)
-                          Text(_expr, style: TextStyle(color: Colors.grey[500], fontSize: 18), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(_result, style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w300), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(
+                            _expr,
+                            style: TextStyle(
+                                color: Colors.grey[500], fontSize: 18),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        Text(
+                          _result,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 44,
+                              fontWeight: FontWeight.w300),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
@@ -236,11 +286,35 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
                     padding: const EdgeInsets.all(10),
                     child: Column(
                       children: [
-                        Row(children: [_btn('C', bg: const Color(0xFFCF6679)), _btn('⌫'), _btn('÷'), _btn('×')]),
-                        Row(children: [_btn('7'), _btn('8'), _btn('9'), _btn('-')]),
-                        Row(children: [_btn('4'), _btn('5'), _btn('6'), _btn('+')]),
-                        Row(children: [_btn('1'), _btn('2'), _btn('3'), _btn('=', bg: const Color(0xFF1E88E5))]),
-                        Row(children: [_btn('0', flex: 2), _btn('.'), _btn('00')]),
+                        Row(children: [
+                          _btn('C', bg: const Color(0xFFCF6679)),
+                          _btn('⌫'),
+                          _btn('÷'),
+                          _btn('×'),
+                        ]),
+                        Row(children: [
+                          _btn('7'),
+                          _btn('8'),
+                          _btn('9'),
+                          _btn('-'),
+                        ]),
+                        Row(children: [
+                          _btn('4'),
+                          _btn('5'),
+                          _btn('6'),
+                          _btn('+'),
+                        ]),
+                        Row(children: [
+                          _btn('1'),
+                          _btn('2'),
+                          _btn('3'),
+                          _btn('=', bg: const Color(0xFF1E88E5)),
+                        ]),
+                        Row(children: [
+                          _btn('0', flex: 2),
+                          _btn('.'),
+                          _btn('00'),
+                        ]),
                       ],
                     ),
                   ),
@@ -254,7 +328,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('জন্ম তারিখ / বছর', style: TextStyle(fontSize: 16)),
+                const Text('জন্ম তারিখ / বছর',
+                    style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _birthCtrl,
@@ -264,7 +339,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
                     hintText: '1998  অথবা  1998-05-15',
                     filled: true,
                     fillColor: const Color(0xFF1A1A1A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -272,17 +350,29 @@ class _CalculatorScreenState extends State<CalculatorScreen> with SingleTickerPr
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E88E5),
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: _calcAge,
-                  child: const Text('বয়স বের করুন', style: TextStyle(fontSize: 16, color: Colors.white)),
+                  child: const Text(
+                    'বয়স বের করুন',
+                    style: TextStyle(fontSize: 16, color: Colors.white),
+                  ),
                 ),
                 const SizedBox(height: 28),
                 if (_ageResult.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(14)),
-                    child: Text(_ageResult, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      _ageResult,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.w600),
+                    ),
                   ),
               ],
             ),
