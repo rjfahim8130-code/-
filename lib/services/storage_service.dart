@@ -4,6 +4,15 @@ class StorageService {
   static const String _passcodeKey = 'secret_passcode';
   static const String _isUnlockedKey = 'is_vault_unlocked';
 
+  /// পাসকোড normalize: সব স্পেস বাদ, ×/÷ কে */ এ রূপান্তর।
+  /// এতে CalculatorScreen-এর তুলনা সবসময় নির্ভুল হবে।
+  static String normalizePasscode(String code) {
+    return code
+        .replaceAll(' ', '')
+        .replaceAll('×', '*')
+        .replaceAll('÷', '/');
+  }
+
   static Future<String> getPasscode() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_passcodeKey) ?? '25*52';
@@ -11,7 +20,7 @@ class StorageService {
 
   static Future<void> setPasscode(String code) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_passcodeKey, code.trim());
+    await prefs.setString(_passcodeKey, normalizePasscode(code));
   }
 
   static Future<bool> isUnlocked() async {
