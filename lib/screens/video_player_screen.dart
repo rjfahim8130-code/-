@@ -3,8 +3,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/video_model.dart';
+import '../services/video_open_service.dart';
+import '../widgets/ad_banner.dart';
 import '../widgets/ad_native.dart';
-import '../widgets/ad_popunder_host.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final VideoModel video;
@@ -22,44 +23,89 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late VideoModel _current;
-  late WebViewController _controller;
+  WebViewController? _controller;
   bool _loading = true;
+
+  /// WebViewWidget-এ key হিসেবে ব্যবহার; প্রতিবার increment-এ নতুন প্লাটফর্ম ভিউ
+  int _tick = 0;
 
   @override
   void initState() {
     super.initState();
     _current = widget.video;
-    _load(_current.playUrl);
+    _createAndLoad(_current.playUrl);
   }
 
-  void _load(String url) {
-    setState(() => _loading = true);
-    _controller = WebViewController()
+  // ───────────────────────── Controller lifecycle ─────────────────────────
+
+  void _releaseController() {
+    final old = _controller;
+    _controller = null;
+    if (old != null) {
+      // best-effort: JS / media থামাও (webview_flutter-এ সরাসরি dispose নেই)
+      old.loadRequest(Uri.parse('about:blank')).catchError((_) {});
+    }
+  }
+
+  void _createAndLoad(String url) {
+    _releaseController();
+
+    final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
       ..enableZoom(false)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onPageStarted: (_) {
+            if (mounted) setState(() => _loading = true);
+          },
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
           },
         ),
       )
       ..loadRequest(Uri.parse(url));
+
+    if (!mounted) return;
+    setState(() {
+      _controller = controller;
+      _tick++; // ⬅️ WebViewWidget রিমাউন্ট করবে
+      _loading = true;
+    });
   }
 
   void _switchTo(VideoModel v) {
     setState(() => _current = v);
-    _load(v.playUrl);
+    _createAndLoad(v.playUrl);
   }
 
+  // ───────────────────────── External open (safe quota) ─────────────────────────
+
+  /// ✅ tryOpenExternal — শুধু সফল open-এ quota কাটে
   Future<void> _openExternal() async {
-    await AdPopunderHost.trigger();
-    final uri = Uri.parse(_current.playUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final openedExternally = await VideoOpenService.tryOpenExternal(() async {
+      final uri = Uri.parse(_current.playUrl);
+      if (!await canLaunchUrl(uri)) return false;
+      return launchUrl(uri, mode: LaunchMode.externalApplication);
+    });
+
+    if (!openedExternally && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('এক্সটার্নাল ব্রাউজারে খুলতে সমস্যা হয়েছে বা কোটা শেষ।'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
+
+  @override
+  void dispose() {
+    _releaseController();
+    super.dispose();
+  }
+
+  // ───────────────────────── Build ─────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -67,42 +113,57 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         .where((v) => v.fileCode != _current.fileCode)
         .toList();
 
+    final controller = _controller;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: Text(_current.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          _current.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.open_in_browser),
-            tooltip: 'ব্রাউজারে খুলুন',
             onPressed: _openExternal,
           ),
         ],
       ),
       body: Column(
         children: [
+          const AdBanner(),
+
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                WebViewWidget(controller: _controller),
-                if (_loading)
-                  const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+            child: controller == null
+                ? Container(color: Colors.black)
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      WebViewWidget(
+                        key: ValueKey(_tick), // ⬅️ সুইচে রিমাউন্ট নিশ্চিত
+                        controller: controller,
+                      ),
+                      if (_loading)
+                        const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF1E88E5),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
           ),
+
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 _current.title,
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
                 ),
@@ -111,58 +172,52 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
           ),
+
           if (others.isNotEmpty) ...[
             const Padding(
-              padding: EdgeInsets.fromLTRB(12, 8, 12, 6),
+              padding: EdgeInsets.fromLTRB(12, 4, 12, 4),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('আরও ভিডিও', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                child: Text(
+                  'আরও ভিডিও',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
               ),
             ),
             SizedBox(
-              height: 100,
+              height: 90,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: others.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (_, i) {
                   final v = others[i];
                   return GestureDetector(
                     onTap: () => _switchTo(v),
                     child: SizedBox(
-                      width: 140,
+                      width: 120,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  v.thumbnail.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: v.thumbnail,
-                                          fit: BoxFit.cover,
-                                          errorWidget: (_, __, ___) =>
-                                              Container(color: Colors.grey[900]),
-                                        )
-                                      : Container(color: Colors.grey[900]),
-                                  const Center(
-                                    child: Icon(Icons.play_circle_fill,
-                                        color: Colors.white70, size: 36),
-                                  ),
-                                ],
-                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: v.thumbnail.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: v.thumbnail,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(color: Colors.grey[900]),
                             ),
                           ),
-                          const SizedBox(height: 4),
                           Text(
                             v.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11, color: Colors.white70),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.white70,
+                            ),
                           ),
                         ],
                       ),
@@ -172,17 +227,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
           ],
-          // হরাইজন্টালের ঠিক পরে Native — Spacer নেই
-          const Expanded(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
-                child: AdNative(height: 250),
-              ),
-            ),
+
+          const Padding(
+            padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: AdNative(height: 130),
           ),
-          const SafeArea(top: false, child: SizedBox(height: 4)),
         ],
       ),
     );
