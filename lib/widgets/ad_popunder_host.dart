@@ -1,44 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../services/popunder_service.dart';
 
-class PopunderService {
-  static const String _keyLastShown = 'popunder_last_shown_ms';
-  static const Duration _cooldown = Duration(minutes: 15);
+class AdPopunderHost extends StatefulWidget {
+  const AdPopunderHost({super.key});
 
-  static const String _html = '''
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body>
-<script data-cfasync="false" src="https://abscloud.org/1/116b66fa602efda9e7d6b42982192a19"></script>
-</body>
-</html>
-''';
+  static final GlobalKey<AdPopunderHostState> hostKey =
+      GlobalKey<AdPopunderHostState>();
 
-  static Future<bool> canShow() async {
-    final prefs = await SharedPreferences.getInstance();
-    final last = prefs.getInt(_keyLastShown) ?? 0;
-    if (last == 0) return true;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return (now - last) >= _cooldown.inMilliseconds;
+  static Future<void> trigger() async {
+    await hostKey.currentState?.trigger();
   }
 
-  static Future<void> markShown() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyLastShown, DateTime.now().millisecondsSinceEpoch);
+  @override
+  State<AdPopunderHost> createState() => AdPopunderHostState();
+}
+
+class AdPopunderHostState extends State<AdPopunderHost> {
+  WebViewController? _controller;
+  bool _show = false;
+
+  Future<void> trigger() async {
+    final ok = await PopunderService.tryAcquire();
+    if (!ok || !mounted) return;
+
+    final c = PopunderService.createController();
+    setState(() {
+      _controller = c;
+      _show = true;
+    });
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() {
+          _show = false;
+          _controller = null;
+        });
+      }
+    });
   }
 
-  static Future<bool> tryAcquire() async {
-    if (!await canShow()) return false;
-    await markShown();
-    return true;
-  }
-
-  static WebViewController createController() {
-    return WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0x00000000))
-      ..loadHtmlString(_html, baseUrl: 'https://abscloud.org');
+  @override
+  Widget build(BuildContext context) {
+    if (!_show || _controller == null) {
+      return const SizedBox.shrink();
+    }
+    return SizedBox(
+      width: 1,
+      height: 1,
+      child: WebViewWidget(controller: _controller!),
+    );
   }
 }
