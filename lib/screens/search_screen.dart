@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // ⬅️ url_launcher যোগ করা হলো
+import 'package:url_launcher/url_launcher.dart';
 import '../models/story_model.dart';
 import '../models/video_model.dart';
-import '../widgets/ad_top_native.dart'; // ⬅️ AdTopNative
+import '../widgets/ad_top_native.dart';
 import '../widgets/ad_native.dart';
 import '../widgets/ad_popunder_host.dart';
-import '../services/video_open_service.dart'; // ⬅️ VideoOpenService
+import '../services/video_open_service.dart';
 import 'story_detail_screen.dart';
 import 'video_player_screen.dart';
 
@@ -45,7 +45,6 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  /// ✅ ভিডিও ট্যাপে সেফ VideoOpenService লজিক
   Future<void> _openVideo(VideoModel video) async {
     await AdPopunderHost.trigger();
 
@@ -85,7 +84,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: Column(
         children: [
-          const AdTopNative(), // ⬅️ AdBanner এর বদলে AdTopNative
+          const AdTopNative(),
           Expanded(
             child: _query.isEmpty
                 ? Center(
@@ -124,7 +123,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const AdNative(height: 130), // ⬅️ উচ্চতা স্ট্যান্ডার্ড 130 করা হলো
+                        const AdNative(height: 130),
                         const SizedBox(height: 16),
                       ],
                       if (_fv.isNotEmpty) ...[
@@ -137,11 +136,11 @@ class _SearchScreenState extends State<SearchScreen> {
                           (v) => ListTile(
                             leading: const Icon(Icons.play_circle, color: Color(0xFFE91E63)),
                             title: Text(v.title, style: const TextStyle(color: Colors.white)),
-                            onTap: () => _openVideo(v), // ⬅️ আপডেট করা _openVideo ব্যবহার
+                            onTap: () => _openVideo(v),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const AdNative(height: 130), // ⬅️ উচ্চতা স্ট্যান্ডার্ড 130 করা হলো
+                        const AdNative(height: 130),
                       ],
                       if (_fs.isEmpty && _fv.isEmpty)
                         Padding(
