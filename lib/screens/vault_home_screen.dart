@@ -1,12 +1,15 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/video_open_service.dart';
 import '../models/story_model.dart';
 import '../models/video_model.dart';
-import '../widgets/ad_banner.dart';
+import '../widgets/ad_top_native.dart';
 import '../widgets/ad_native.dart';
+import '../widgets/ad_banner_medium.dart';
 import '../widgets/ad_popunder_host.dart';
 import 'story_detail_screen.dart';
 import 'video_player_screen.dart';
@@ -33,13 +36,12 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
   void initState() {
     super.initState();
     _sync();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AdPopunderHost.trigger();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => AdPopunderHost.trigger());
   }
 
-  DateTime _storyDate(StoryModel s) => s.createdAt ?? DateTime(2000);
+  // ───────────────────────── তারিখ / সাজানো ─────────────────────────
 
+  DateTime _storyDate(StoryModel s) => s.createdAt ?? DateTime(2000);
   DateTime _videoDate(VideoModel v) {
     if (v.uploaded.isEmpty) return DateTime(2000);
     return DateTime.tryParse(v.uploaded) ?? DateTime(2000);
@@ -51,19 +53,15 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     return DateTime(2000);
   }
 
-  /// নতুন আগে; একই দিনের মধ্যে হালকা শাফল
   List<T> _sortByDateThenShuffle<T>(List<T> list, DateTime Function(T) dateOf) {
     final copy = List<T>.from(list);
     copy.sort((a, b) => dateOf(b).compareTo(dateOf(a)));
     if (copy.length <= 1) return copy;
-
     final today = DateTime.now();
     final recent = <T>[];
     final older = <T>[];
     for (final item in copy) {
-      final d = dateOf(item);
-      final isNew = today.difference(d).inDays <= 1;
-      if (isNew) {
+      if (today.difference(dateOf(item)).inDays <= 1) {
         recent.add(item);
       } else {
         older.add(item);
@@ -73,6 +71,8 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     older.shuffle(Random());
     return [...recent, ...older];
   }
+
+  // ───────────────────────── Sync ─────────────────────────
 
   Future<void> _sync() async {
     if (_syncing) return;
@@ -85,26 +85,23 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
       List<VideoModel> videos = [];
       try {
         stories = await ApiService.fetchStories();
-      } catch (e) {
-        print('stories error: $e');
-      }
+      } catch (_) {}
       try {
         videos = await ApiService.fetchVideos();
-      } catch (e) {
-        print('videos error: $e');
-      }
+      } catch (_) {}
 
       stories = _sortByDateThenShuffle(stories, _storyDate);
       videos = _sortByDateThenShuffle(videos, _videoDate);
-
-      final mixed = <dynamic>[...stories, ...videos];
-      final sortedMixed = _sortByDateThenShuffle(mixed, _itemDate);
+      final mixed = _sortByDateThenShuffle<dynamic>(
+        [...stories, ...videos],
+        _itemDate,
+      );
 
       if (!mounted) return;
       setState(() {
         _stories = stories;
         _videos = videos;
-        _homeFeed = sortedMixed;
+        _homeFeed = mixed;
         if (stories.isEmpty && videos.isEmpty) {
           _error = 'ডেটা আসেনি। Sync আবার চাপুন।';
         }
@@ -113,6 +110,8 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
       if (mounted) setState(() => _syncing = false);
     }
   }
+
+  // ───────────────────────── Navigation actions ─────────────────────────
 
   Future<void> _lock() async {
     await StorageService.lockVault();
@@ -134,8 +133,19 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
+  /// ✅ আপডেট: tryOpenExternal — ব্রাউজার সফলভাবে খুললেই কেবল কোটা কাটবে।
+  ///    ব্যর্থ open-এ বা লিমিট শেষে in-app player-এ ফলব্যাক।
   Future<void> _openVideo(VideoModel video) async {
     await AdPopunderHost.trigger();
+
+    final openedExternally = await VideoOpenService.tryOpenExternal(() async {
+      final uri = Uri.parse(video.playUrl);
+      if (!await canLaunchUrl(uri)) return false;
+      return launchUrl(uri, mode: LaunchMode.externalApplication);
+    });
+
+    if (openedExternally) return;
+
     if (!mounted) return;
     Navigator.push(
       context,
@@ -145,6 +155,31 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
+  // ───────────────────────── Ad slot pattern ─────────────────────────
+  // প্যাটার্ন: data, data, ad, data, data, ad, ...
+  //  - প্রতি ৩য় স্লটে অ্যাড
+  //  - কিন্তু শেষ স্লটে অ্যাড দেব না (ডেটা ছাড়া ট্রেইলিং অ্যাড এড়াতে)
+
+  static const _adEvery = 3; // প্রতি ৩য় স্লটে অ্যাড
+
+  /// মোট কতটি ডেটা স্লট + কতটি অ্যাড স্লট
+  /// শেষ স্লট ad না হলে ট্রেইলিং-এড এড়ানো যায়।
+  ({int total, int dataCount, int adCount}) _layout(int n) {
+    if (n == 0) return (total: 0, dataCount: 0, adCount: 0);
+    // প্রতি ৩টির মধ্যে ২টি ডেটা, ১টি অ্যাড (স্লট-ভিত্তিক)
+    // তবে শেষের ad বাদ দিয়ে হিসাব করি: n ডেটার জন্য সর্বোচ্চ n ~/ 2 অ্যাড
+    final adCount = n ~/ 2;
+    return (total: n + adCount, dataCount: n, adCount: adCount);
+  }
+
+  Widget _adAt(int adIndex) {
+    // even adIndex → Native 3:1, odd → 300x250
+    if (adIndex.isEven) return const AdNative(height: 130);
+    return const AdBannerMedium();
+  }
+
+  // ───────────────────────── Build ─────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -152,7 +187,10 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
         Scaffold(
           backgroundColor: const Color(0xFF0D0D0D),
           appBar: AppBar(
-            title: const Text('Private Vault', style: TextStyle(fontWeight: FontWeight.w600)),
+            title: const Text(
+              'Private Vault',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             backgroundColor: const Color(0xFF121212),
             elevation: 0,
             actions: [
@@ -161,7 +199,10 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.sync),
                 onPressed: _syncing ? null : _sync,
@@ -174,7 +215,8 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => SearchScreen(stories: _stories, videos: _videos),
+                      builder: (_) =>
+                          SearchScreen(stories: _stories, videos: _videos),
                     ),
                   );
                 },
@@ -186,12 +228,15 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
               ),
-              IconButton(icon: const Icon(Icons.lock_outline), onPressed: _lock),
+              IconButton(
+                icon: const Icon(Icons.lock_outline),
+                onPressed: _lock,
+              ),
             ],
           ),
           body: Column(
             children: [
-              const AdBanner(),
+              const AdTopNative(),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _sync,
@@ -234,9 +279,9 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
   }
 
   Widget _buildBody() {
-    if (_tab == 1) return _storiesBody();
-    if (_tab == 2) return _videosBody();
-    return _homeBody();
+    if (_tab == 1) return _listBody(_stories);
+    if (_tab == 2) return _listBody(_videos);
+    return _listBody(_homeFeed);
   }
 
   Widget _empty(String msg) {
@@ -257,14 +302,6 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[500]),
               ),
-              if (!_syncing) ...[
-                const SizedBox(height: 12),
-                TextButton.icon(
-                  onPressed: _sync,
-                  icon: const Icon(Icons.sync, color: Color(0xFF1E88E5)),
-                  label: const Text('আবার Sync', style: TextStyle(color: Color(0xFF1E88E5))),
-                ),
-              ],
             ],
           ),
         ),
@@ -272,65 +309,44 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
-  /// প্রতি ২টা কার্ডের পর ১টা Native → স্লট: data, data, ad, data, data, ad...
-  int _countWithAds(int n) => n + (n ~/ 2);
-
-  int _dataIndex(int i) => i - (i ~/ 3);
-
-  bool _isAdSlot(int i) => (i + 1) % 3 == 0;
-
-  Widget _homeBody() {
-    if (_homeFeed.isEmpty) {
-      return _empty(_error ?? 'হোমে এখনো কিছু নেই\nSync চাপুন');
+  /// লেআউট: data, data, ad, data, data, ad, ... data (কখনোই ad দিয়ে শেষ হবে না)
+  /// প্রতি [_adEvery] স্লটে একবার অ্যাড, কিন্তু শেষ স্লট অ্যাড নয়।
+  Widget _listBody(List items) {
+    if (items.isEmpty) {
+      return _empty(_error ?? 'কিছু নেই\nSync চাপুন');
     }
-    final n = _homeFeed.length;
+    final n = items.length;
+    final layout = _layout(n);
+
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
-      itemCount: _countWithAds(n),
+      itemCount: layout.total,
       itemBuilder: (_, i) {
-        if (_isAdSlot(i)) return const AdNative(height: 250);
-        final di = _dataIndex(i);
+        // স্লট প্যাটার্ন: প্রতি ৩য় স্লট (i=2, 5, 8, ...) অ্যাড
+        final isAdSlot = (i + 1) % _adEvery == 0;
+
+        if (isAdSlot) {
+          final adIndex = (i + 1) ~/ _adEvery - 1;
+          // নিরাপত্তা: adIndex কখনো layout.adCount অতিক্রম করবে না
+          if (adIndex >= layout.adCount) return const SizedBox.shrink();
+          return _adAt(adIndex);
+        }
+
+        // ডেটা ইনডেক্স: i - (কতটি অ্যাড ইতিমধ্যে পেরিয়েছি)
+        final adsBefore = (i + 1) ~/ _adEvery; // i-এর আগে কতগুলো ad slot
+        final di = i - adsBefore;
         if (di < 0 || di >= n) return const SizedBox.shrink();
-        final item = _homeFeed[di];
+
+        final item = items[di];
         if (item is StoryModel) return _storyCard(item);
-        if (item is VideoModel) return _videoCardWide(item);
+        if (item is VideoModel) return _videoCard(item);
         return const SizedBox.shrink();
       },
     );
   }
 
-  Widget _storiesBody() {
-    if (_stories.isEmpty) return _empty('কোনো গল্প নেই');
-    final n = _stories.length;
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(12),
-      itemCount: _countWithAds(n),
-      itemBuilder: (_, i) {
-        if (_isAdSlot(i)) return const AdNative(height: 250);
-        final di = _dataIndex(i);
-        if (di < 0 || di >= n) return const SizedBox.shrink();
-        return _storyCard(_stories[di]);
-      },
-    );
-  }
-
-  Widget _videosBody() {
-    if (_videos.isEmpty) return _empty('কোনো ভিডিও নেই');
-    final n = _videos.length;
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(12),
-      itemCount: _countWithAds(n),
-      itemBuilder: (_, i) {
-        if (_isAdSlot(i)) return const AdNative(height: 250);
-        final di = _dataIndex(i);
-        if (di < 0 || di >= n) return const SizedBox.shrink();
-        return _videoCardWide(_videos[di]);
-      },
-    );
-  }
+  // ───────────────────────── Cards ─────────────────────────
 
   Widget _storyCard(StoryModel story) {
     return Container(
@@ -343,53 +359,18 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Row(
-              children: [
-                if (story.code.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'কোড: ${story.code}',
-                      style: const TextStyle(fontSize: 11, color: Colors.lightBlueAccent),
-                    ),
-                  ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B4332),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    story.episodeLabel,
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF95D5B2)),
-                  ),
-                ),
-              ],
-            ),
-          ),
           if (story.hasImage)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: CachedNetworkImage(
                   imageUrl: story.imageUrl,
-                  height: 200,
+                  height: 180,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(height: 200, color: Colors.grey[900]),
-                  errorWidget: (_, __, ___) => Container(
-                    height: 200,
-                    color: Colors.grey[900],
-                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
+                  errorWidget: (_, __, ___) =>
+                      Container(height: 180, color: Colors.grey[900]),
                 ),
               ),
             ),
@@ -397,33 +378,29 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
             child: Text(
               story.title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Text(
-              story.cardSubtitle,
-              style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.4),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
             child: SizedBox(
-              height: 44,
+              height: 42,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1B4332),
                   foregroundColor: const Color(0xFF95D5B2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                  ),
                 ),
                 onPressed: () => _openStory(story),
-                child: const Text('সম্পূর্ণ পড়ুন', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: const Text('সম্পূর্ণ পড়ুন'),
               ),
             ),
           ),
@@ -432,7 +409,7 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     );
   }
 
-  Widget _videoCardWide(VideoModel video) {
+  Widget _videoCard(VideoModel video) {
     return GestureDetector(
       onTap: () => _openVideo(video),
       child: Container(
@@ -456,11 +433,16 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                         ? CachedNetworkImage(
                             imageUrl: video.thumbnail,
                             fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => Container(color: Colors.grey[900]),
+                            errorWidget: (_, __, ___) =>
+                                Container(color: Colors.grey[900]),
                           )
                         : Container(color: Colors.grey[900]),
                     const Center(
-                      child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 56),
+                      child: Icon(
+                        Icons.play_circle_fill,
+                        color: Colors.white70,
+                        size: 56,
+                      ),
                     ),
                   ],
                 ),
@@ -472,7 +454,11 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
                 video.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
