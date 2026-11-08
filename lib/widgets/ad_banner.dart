@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-/// Adsterra Banner 300x250 — প্লেয়ার ছাড়া সব স্ক্রিনের টপ (sticky)
+/// 320x50 — Video Player টপ
 class AdBanner extends StatefulWidget {
   const AdBanner({super.key});
 
@@ -11,28 +11,39 @@ class AdBanner extends StatefulWidget {
 
 class _AdBannerState extends State<AdBanner> {
   late final WebViewController _controller;
+  bool _isLoading = true;
+  bool _hasError = false;
 
-  static const _html = '''
+  static const String _htmlContent = '''
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>
-  html, body { margin:0; padding:0; background:#0D0D0D; overflow:hidden; text-align:center; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0D0D0D;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
 </style>
 </head>
 <body>
-<script>
+<script type="text/javascript">
   atOptions = {
-    'key' : 'fc1454c2d1336f9034aa01b47d93abf3',
+    'key' : '55ab2946fa3e9e6f9f905b2a74726eda',
     'format' : 'iframe',
-    'height' : 250,
-    'width' : 300,
+    'height' : 50,
+    'width' : 320,
     'params' : {}
   };
 </script>
-<script src="https://bauval.org/22/fc1454c2d1336f9034aa01b47d93abf3"></script>
+<script type="text/javascript" src="https://bauval.org/22/55ab2946fa3e9e6f9f905b2a74726eda"></script>
 </body>
 </html>
 ''';
@@ -40,18 +51,101 @@ class _AdBannerState extends State<AdBanner> {
   @override
   void initState() {
     super.initState();
+    _initController();
+  }
+
+  void _initController() {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF0D0D0D))
-      ..loadHtmlString(_html, baseUrl: 'https://bauval.org');
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) {
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+                _hasError = false;
+              });
+            }
+          },
+          onPageFinished: (_) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          },
+          onWebResourceError: (error) {
+            // মূল পেজ লোড ব্যর্থ হলে তবেই error দেখাবে
+            if (error.isForMainFrame ?? false) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                  _hasError = true;
+                });
+              }
+            }
+          },
+        ),
+      )
+      // baseUrl অবশ্যই দিতে হবে — Adsterra/Referer যাচাইয়ের জন্য জরুরি
+      ..loadHtmlString(_htmlContent, baseUrl: 'https://bauval.org');
+  }
+
+  void _reload() {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    _controller.loadHtmlString(_htmlContent, baseUrl: 'https://bauval.org');
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 250,
+    return Container(
+      height: 50,
       width: double.infinity,
-      child: WebViewWidget(controller: _controller),
+      color: const Color(0xFF0D0D0D),
+      child: _hasError
+          ? _ErrorView(onRetry: _reload)
+          : Stack(
+              children: [
+                WebViewWidget(controller: _controller),
+                if (_isLoading)
+                  const Center(
+                    child: SizedBox(
+                      height: 15,
+                      width: 15,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onRetry,
+      behavior: HitTestBehavior.opaque,
+      child: const Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.refresh, size: 14, color: Colors.white54),
+            SizedBox(width: 4),
+            Text(
+              'রিলোড করুন',
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
