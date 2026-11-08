@@ -25,8 +25,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late VideoModel _current;
   WebViewController? _controller;
   bool _loading = true;
-
-  /// WebViewWidget-এ key হিসেবে ব্যবহার; প্রতিবার increment-এ নতুন প্লাটফর্ম ভিউ
   int _tick = 0;
 
   @override
@@ -36,13 +34,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _createAndLoad(_current.playUrl);
   }
 
-  // ───────────────────────── Controller lifecycle ─────────────────────────
-
   void _releaseController() {
     final old = _controller;
     _controller = null;
     if (old != null) {
-      // best-effort: JS / media থামাও (webview_flutter-এ সরাসরি dispose নেই)
       old.loadRequest(Uri.parse('about:blank')).catchError((_) {});
     }
   }
@@ -69,7 +64,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (!mounted) return;
     setState(() {
       _controller = controller;
-      _tick++; // ⬅️ WebViewWidget রিমাউন্ট করবে
+      _tick++;
       _loading = true;
     });
   }
@@ -79,9 +74,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _createAndLoad(v.playUrl);
   }
 
-  // ───────────────────────── External open (safe quota) ─────────────────────────
-
-  /// ✅ tryOpenExternal — শুধু সফল open-এ quota কাটে
   Future<void> _openExternal() async {
     final openedExternally = await VideoOpenService.tryOpenExternal(() async {
       final uri = Uri.parse(_current.playUrl);
@@ -104,8 +96,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _releaseController();
     super.dispose();
   }
-
-  // ───────────────────────── Build ─────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +124,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       body: Column(
         children: [
           const AdBanner(),
-
           AspectRatio(
             aspectRatio: 16 / 9,
             child: controller == null
@@ -143,7 +132,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     fit: StackFit.expand,
                     children: [
                       WebViewWidget(
-                        key: ValueKey(_tick), // ⬅️ সুইচে রিমাউন্ট নিশ্চিত
+                        key: ValueKey(_tick),
                         controller: controller,
                       ),
                       if (_loading)
@@ -155,7 +144,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     ],
                   ),
           ),
-
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Align(
@@ -172,7 +160,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
           ),
-
           if (others.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(12, 4, 12, 4),
@@ -227,7 +214,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             ),
           ],
-
           const Padding(
             padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
             child: AdNative(height: 130),
