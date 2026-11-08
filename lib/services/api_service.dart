@@ -5,8 +5,6 @@ import '../models/story_model.dart';
 import '../models/video_model.dart';
 
 class ApiService {
-  // ───────────────────────── Stories ─────────────────────────
-
   static Future<List<StoryModel>> fetchStories() async {
     try {
       final response = await http
@@ -20,7 +18,6 @@ class ApiService {
 
       final dynamic decoded = json.decode(response.body);
 
-      // ⬇️ ত্রুটিমুক্ত ডিকোডিং (List / Map / null — সব কেস)
       final List raw = decoded is List
           ? decoded
           : decoded is Map && decoded['stories'] is List
@@ -28,7 +25,7 @@ class ApiService {
               : [];
 
       return raw
-          .whereType() // ⬅️ টাইপ প্যারামিটার সহ
+          .whereType<Map>()
           .map((doc) => StoryModel.fromJson(Map<String, dynamic>.from(doc)))
           .toList();
     } catch (e) {
@@ -36,8 +33,6 @@ class ApiService {
       return [];
     }
   }
-
-  // ───────────────────────── Videos ─────────────────────────
 
   static Future<List<VideoModel>> fetchVideos({
     int page = 1,
@@ -58,7 +53,6 @@ class ApiService {
       final data = json.decode(response.body);
       if (data is! Map) return [];
 
-      // status 200 বা result != null — যেকোনোটি ঠিক থাকলেই চলবে
       final statusOk = data['status'] == 200;
       final result = data['result'];
       if (!statusOk && result == null) return [];
@@ -70,7 +64,7 @@ class ApiService {
               : [];
 
       return raw
-          .whereType() // ⬅️ টাইপ প্যারামিটার সহ
+          .whereType<Map>()
           .map((file) => VideoModel.fromJson(Map<String, dynamic>.from(file)))
           .toList();
     } catch (e) {
