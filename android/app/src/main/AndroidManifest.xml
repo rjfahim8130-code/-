@@ -3,10 +3,11 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    
     <application
-        android:label="Age Calculator"
+        android:label="Calculator Vault"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_launcher"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -29,6 +30,7 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+    
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
