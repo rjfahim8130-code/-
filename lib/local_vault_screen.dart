@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'local_media_model.dart';
@@ -48,14 +47,13 @@ class _LocalVaultScreenState extends State<LocalVaultScreen> {
   }
 
   Future<void> _addVideo() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.video);
-    if (result == null || result.files.isEmpty) return;
-    final path = result.files.single.path;
-    if (path == null) return;
+    final picker = ImagePicker();
+    final x = await picker.pickVideo(source: ImageSource.gallery);
+    if (x == null) return;
     await LocalMediaService.importFile(
-      sourcePath: path,
+      sourcePath: x.path,
       type: LocalMediaType.video,
-      displayName: result.files.single.name,
+      displayName: x.name,
     );
     await _reload();
   }
