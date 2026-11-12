@@ -49,8 +49,14 @@ class _CalculatorScreenState extends State<CalculatorScreen>
 
   Future<void> _evaluate() async {
     final pass = await StorageService.getPasscode();
-    if (StorageService.normalizePasscode(_expr) ==
-        StorageService.normalizePasscode(pass)) {
+    final typed = StorageService.normalizePasscode(
+      _expr.replaceAll('×', '*').replaceAll('÷', '/'),
+    );
+    final secret = StorageService.normalizePasscode(
+      pass.replaceAll('×', '*').replaceAll('÷', '/'),
+    );
+
+    if (typed.isNotEmpty && typed == secret) {
       await StorageService.setUnlocked(true);
       if (!mounted) return;
       Navigator.pushReplacement(
