@@ -11,6 +11,8 @@ import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'calculator_screen.dart';
 import 'local_vault_screen.dart';
+import 'ad_banner.dart';
+import 'ad_native.dart';
 
 class VaultHomeScreen extends StatefulWidget {
   const VaultHomeScreen({super.key});
@@ -164,10 +166,17 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
           IconButton(icon: const Icon(Icons.lock_outline), onPressed: _lock),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _sync,
-        color: const Color(0xFF1E88E5),
-        child: _buildBody(),
+      body: Column(
+        children: [
+          const AdBanner(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _sync,
+              color: const Color(0xFF1E88E5),
+              child: _buildBody(),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF121212),
@@ -238,12 +247,19 @@ class _VaultHomeScreenState extends State<VaultHomeScreen> {
     if (items.isEmpty) {
       return _empty(_error ?? 'কিছু নেই\nSync চাপুন');
     }
+    final n = items.length;
+    final itemCount = n + (n ~/ 2); // প্রতি ২ আইটেমে ১ অ্যাড
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
-      itemCount: items.length,
+      itemCount: itemCount,
       itemBuilder: (_, i) {
-        final item = items[i];
+        if ((i + 1) % 3 == 0) {
+          return const AdNative(height: 250);
+        }
+        final di = i - (i ~/ 3);
+        if (di < 0 || di >= n) return const SizedBox.shrink();
+        final item = items[di];
         if (item is StoryModel) return _storyCard(item);
         if (item is VideoModel) return _videoCard(item);
         return const SizedBox.shrink();
