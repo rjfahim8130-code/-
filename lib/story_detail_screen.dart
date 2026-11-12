@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'story_model.dart';
 import 'reading_screen.dart';
+import 'ad_banner.dart';
+import 'ad_native.dart';
 
 class StoryDetailScreen extends StatelessWidget {
   final StoryModel story;
@@ -19,131 +21,140 @@ class StoryDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 220,
-            pinned: true,
-            backgroundColor: const Color(0xFF121212),
-            flexibleSpace: FlexibleSpaceBar(
-              background: story.hasImage
-                  ? CachedNetworkImage(
-                      imageUrl: story.imageUrl,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) =>
-                          Container(color: Colors.grey[900]),
-                    )
-                  : Container(
-                      color: Colors.grey[900],
-                      child: const Icon(Icons.menu_book,
-                          size: 72, color: Colors.grey),
-                    ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (story.code.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'কোড: ${story.code}',
-                        style:
-                            TextStyle(color: Colors.blue[300], fontSize: 13),
-                      ),
-                    ),
-                  Text(
-                    story.title,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+      body: Column(
+        children: [
+          const AdBanner(),
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverAppBar(
+                  expandedHeight: 220,
+                  pinned: true,
+                  backgroundColor: const Color(0xFF121212),
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: story.hasImage
+                        ? CachedNetworkImage(
+                            imageUrl: story.imageUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                Container(color: Colors.grey[900]),
+                          )
+                        : Container(
+                            color: Colors.grey[900],
+                            child: const Icon(Icons.menu_book,
+                                size: 72, color: Colors.grey),
+                          ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'লেখক: ${story.author}',
-                    style: TextStyle(color: Colors.grey[400]),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    story.description,
-                    style: TextStyle(
-                      color: Colors.grey[300],
-                      fontSize: 15,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1B4332),
-                        foregroundColor: const Color(0xFF95D5B2),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      icon: const Icon(Icons.menu_book),
-                      label: const Text(
-                        'সম্পূর্ণ পড়ুন',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ReadingScreen(
-                              story: story,
-                              allStories: allStories,
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (story.code.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              'কোড: ${story.code}',
+                              style:
+                                  TextStyle(color: Colors.blue[300], fontSize: 13),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  if (others.isNotEmpty) ...[
-                    const SizedBox(height: 28),
-                    const Text(
-                      'আরও গল্প',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ...others.take(8).map(
-                      (s) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          s.title,
-                          maxLines: 2,
-                          style: const TextStyle(color: Colors.white),
+                        Text(
+                          story.title,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => StoryDetailScreen(
-                                story: s,
-                                allStories: allStories,
+                        const SizedBox(height: 10),
+                        Text(
+                          'লেখক: ${story.author}',
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          story.description,
+                          style: TextStyle(
+                            color: Colors.grey[300],
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1B4332),
+                              foregroundColor: const Color(0xFF95D5B2),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                          );
-                        },
-                      ),
+                            icon: const Icon(Icons.menu_book),
+                            label: const Text(
+                              'সম্পূর্ণ পড়ুন',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ReadingScreen(
+                                    story: story,
+                                    allStories: allStories,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const AdNative(height: 250),
+                        if (others.isNotEmpty) ...[
+                          const SizedBox(height: 28),
+                          const Text(
+                            'আরও গল্প',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...others.take(8).map(
+                            (s) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                s.title,
+                                maxLines: 2,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => StoryDetailScreen(
+                                      story: s,
+                                      allStories: allStories,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                      ],
                     ),
-                  ],
-                  const SizedBox(height: 24),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
