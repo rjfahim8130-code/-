@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'storage_service.dart';
 import 'vault_home_screen.dart';
+import 'gate_service.dart';
+import 'gate_screen.dart';
 
 class CalculatorScreen extends StatefulWidget {
   const CalculatorScreen({super.key});
@@ -59,9 +61,19 @@ class _CalculatorScreenState extends State<CalculatorScreen>
     if (typed.isNotEmpty && typed == secret) {
       await StorageService.setUnlocked(true);
       if (!mounted) return;
+
+      // গেট লজিক
+      final unlocked = await GateService.isUnlocked();
+      final bypass = await GateService.allowBypassWhenQuotaFull();
+      final goHome = unlocked || bypass;
+
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const VaultHomeScreen()),
+        MaterialPageRoute(
+          builder: (_) => goHome
+              ? const VaultHomeScreen()
+              : const GateScreen(),
+        ),
       );
       return;
     }
